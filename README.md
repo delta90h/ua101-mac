@@ -1,0 +1,65 @@
+# UA-101 Driver for Apple silicon Macs
+
+A driver and control app for the **Edirol / Roland UA-101** USB audio interface on Macs with Apple silicon (M1 and later). Roland's own driver stopped working years ago; with this one the UA-101 works again as an ordinary sound and MIDI device on a current Mac.
+
+![UA-101 Control: the direct monitor mixer](images/mixer.png)
+
+**[Download the latest version](../../releases/latest)**: `UA-101 Driver.pkg` and the manual as a PDF.
+
+## What you get
+
+- **Sound in every app.** The UA-101 shows in System Settings → Sound, Logic Pro and every other music app: up to 12 inputs (the monitor mix included) and 10 outputs, at 44.1, 48, 88.2, 96 and 192 kHz (6 each way at 192 kHz). The channels carry the names of the sockets (INPUT 1-8, OPTICAL IN, MONITOR OUT; OUTPUT 1-8, OPTICAL OUT).
+- **MIDI.** A keyboard on the box's MIDI IN and MIDI OUT shows in every MIDI app as **UA-101 MIDI**, and in Audio MIDI Setup with the box's picture.
+- **UA-101 Control**, the control panel:
+  - the direct monitor mixer: on, solo, pan, volume and stereo link for every channel, with meters;
+  - the patch bay: what each pair of OUTPUT sockets plays;
+  - the box's five memories: recall, save, reset to factory;
+  - backups of the settings as files on your Mac, made by themselves before every bigger change;
+  - Driver Settings: how much delay the driver uses, with what was measured while sound ran.
+- **Every account on the Mac** gets the sound, the MIDI and the control panel.
+- **A full manual** in the app's Help menu, and as a PDF.
+- **Nothing goes over the internet.**
+
+| Patch bay | Driver Settings |
+|---|---|
+| ![Patch Bay](images/patch-bay.png) | ![Driver Settings](images/driver-settings.png) |
+
+## What you need
+
+- A Mac with Apple silicon (M1 or later).
+- macOS 14 Sonoma or later. *Tested on macOS 27.2 on an M1 MacBook Pro; the versions in between are built for but not yet tried.*
+- An Edirol UA-101 with its rear **Hi-Speed** USB switch on, connected to the Mac (directly or through a hub).
+
+## Install
+
+1. Download **UA-101 Driver.pkg** from the [latest release](../../releases/latest).
+2. Quit the apps that play sound. Double-click the file.
+3. The installer isn't signed through Apple's paid developer program, so macOS says it **can't check it** and won't open it. Click **Done**. Then open **System Settings → Privacy & Security**, scroll down to **Security**, click **Open Anyway** next to the installer's name, type your password and click **Open Anyway** again. You do this once for each downloaded copy.
+4. Follow the installer's pages, click **Install** and type your password.
+5. Open **UA-101 Control** from Applications. With the box on, it says **Ready**.
+
+To use the UA-101 for the whole Mac, choose it in **System Settings → Sound**. In Logic Pro: **Settings → Audio → Devices**.
+
+**Update:** install a newer `UA-101 Driver.pkg` the same way, over the old one. Your Driver Settings, your backups and the box's own settings stay.
+
+## Remove
+
+Quit the apps that use the UA-101 and UA-101 Control. In Terminal (Applications → Utilities), type this with the quotes and press Return:
+
+```
+"/Library/Application Support/ua101-driver/uninstall.sh"
+```
+
+Type `yes`, then your password. Your backups and the box's settings and memories stay.
+
+## Good to know
+
+- The sample rate is set with the **SAMPLE RATE** knob on the box, with the box switched off, as Roland asks.
+- The box's **Full-Speed** mode (the USB switch down) is not supported.
+- UA-101 Control doesn't need to be open for sound or MIDI.
+
+## About
+
+Free to use, with no warranty of any kind. Use it at your own risk: turn your monitors down before trying something new.
+
+This project is not made, supported or endorsed by Roland Corporation. Edirol, Roland and UA-101 are trademarks of Roland Corporation, used here only to name the hardware this driver works with.
