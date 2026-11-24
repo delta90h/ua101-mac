@@ -44,13 +44,18 @@ To use the UA-101 for the whole Mac, choose it in **System Settings → Sound**.
 
 ## Remove
 
-Quit the apps that use the UA-101 and UA-101 Control. In Terminal (Applications → Utilities), type this with the quotes and press Return:
+Quit the apps that use the UA-101. In UA-101 Control choose **UA-101 Control → Uninstall UA-101…** and pick one:
+
+- **Remove the Driver, Keep My Settings**: the driver, its MIDI device and the app go. Your Driver Settings and the app's choices stay, for a later install.
+- **Remove Everything**: every UA-101 file and setting on the Mac goes too, in every account. A tick (on to start with) keeps your backup files and reports.
+
+macOS asks for an administrator's password. The box's own settings and memories are never touched.
+
+If the app is already gone, type this in Terminal (Applications → Utilities), with the quotes, and press Return. It asks the same two choices:
 
 ```
 "/Library/Application Support/ua101-driver/uninstall.sh"
 ```
-
-Type `yes`, then your password. Your backups and the box's settings and memories stay.
 
 ## Good to know
 
