@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The installer's pages and order. install/pkg/build-pkg.sh fills in
+     @VERSION@ and @MACOS_MIN@. The scripts run first (prepare) and last (finish). -->
+<installer-gui-script minSpecVersion="2">
+    <title>UA-101 Driver</title>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <readme file="readme.html" mime-type="text/html"/>
+    <options customize="never" require-scripts="true" rootVolumeOnly="true" hostArchitectures="arm64"/>
+    <domains enable_localSystem="true" enable_anywhere="false" enable_currentUserHome="false"/>
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="@MACOS_MIN@"/>
+        </allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="default">
+            <line choice="io.github.delta90h.ua101"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="io.github.delta90h.ua101" visible="false" title="UA-101 Driver">
+        <pkg-ref id="io.github.delta90h.ua101.prepare"/>
+        <pkg-ref id="io.github.delta90h.ua101.helper"/>
+        <pkg-ref id="io.github.delta90h.ua101.hal"/>
+        <pkg-ref id="io.github.delta90h.ua101.midi"/>
+        <pkg-ref id="io.github.delta90h.ua101.app"/>
+        <pkg-ref id="io.github.delta90h.ua101.finish"/>
+    </choice>
+    <pkg-ref id="io.github.delta90h.ua101.prepare" version="@VERSION@" onConclusion="none">prepare.pkg</pkg-ref>
+    <pkg-ref id="io.github.delta90h.ua101.helper" version="@VERSION@" onConclusion="none">helper.pkg</pkg-ref>
+    <pkg-ref id="io.github.delta90h.ua101.hal" version="@VERSION@" onConclusion="none">hal.pkg</pkg-ref>
+    <pkg-ref id="io.github.delta90h.ua101.midi" version="@VERSION@" onConclusion="none">midi.pkg</pkg-ref>
+    <pkg-ref id="io.github.delta90h.ua101.app" version="@VERSION@" onConclusion="none">app.pkg</pkg-ref>
+    <pkg-ref id="io.github.delta90h.ua101.finish" version="@VERSION@" onConclusion="none">finish.pkg</pkg-ref>
+</installer-gui-script>

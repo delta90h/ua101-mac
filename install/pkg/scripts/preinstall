@@ -1,0 +1,78 @@
+#!/bin/sh
+# The installer package's first step, run by macOS Installer as root before any
+# file is copied. It does what the first half of install/install.sh does:
+#   - stops an earlier MIDI agent (option A) and removes its login file,
+#   - stops an earlier helper, so its file isn't replaced under it,
+#   - removes the two go-ahead files of link versions 5 to 17,
+#   - removes the earlier helper, plug-ins and app first, so every new file is a new file and
+#     never a copy over a running program (macOS then kills it: see commit f2a1865).
+# Its messages go to the install log (Installer: Window > Installer Log).
+
+set -u
+
+LABEL=io.github.delta90h.ua101d
+HELPER_DIR="/Library/Application Support/ua101-driver"
+DAEMON_PLIST="/Library/LaunchDaemons/$LABEL.plist"
+PLUGIN="/Library/Audio/Plug-Ins/HAL/UA101.driver"
+MIDI_PLUGIN="/Library/Audio/MIDI Drivers/UA101MIDI.plugin"
+AGENT_LABEL=io.github.delta90h.ua101midi
+AGENT_PLIST="/Library/LaunchAgents/$AGENT_LABEL.plist"
+APP="/Applications/UA-101 Control.app"
+
+say() { printf 'UA-101 preinstall: %s\n' "$*"; }
+
+[ "$(uname -m)" = arm64 ] || { say "this is for Macs with Apple silicon only."; exit 1; }
+
+# The account the helper will run as: whoever is logged in at the screen and runs Installer.
+user=$(stat -f %Su /dev/console 2>/dev/null || true)
+case "$user" in ""|root|loginwindow|_mbsetupuser) user="${USER-}" ;; esac
+case "$user" in ""|root) user="${SUDO_USER-}" ;; esac
+if [ -z "$user" ] || [ "$user" = root ] || ! id -u "$user" >/dev/null 2>&1; then
+    say "no logged-in user found to run the helper as. Log in and run the installer from the Finder."
+    exit 1
+fi
+say "the helper will run as $user"
+
+busy=$(pgrep -fl 'ua101stream|ua101linktest|trials\.sh|ua101d --self-test' || true)
+if [ -n "$busy" ]; then
+    say "a test program is using the unit. Let it finish first: $busy"
+    exit 1
+fi
+
+# An earlier MIDI agent, in every logged-in user's session.
+for uid in $(ps -axo uid=,comm= | awk '$2 ~ /loginwindow$/ {print $1}' | sort -u); do
+    if launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then
+        say "stopping the earlier MIDI agent of user $uid"
+        launchctl bootout "gui/$uid/$AGENT_LABEL" 2>/dev/null || true
+        tries=0
+        while launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1 && [ "$tries" -lt 10 ]; do
+            sleep 0.5
+            tries=$((tries + 1))
+        done
+    fi
+done
+rm -f "$AGENT_PLIST"
+
+if launchctl print "system/$LABEL" >/dev/null 2>&1; then
+    say "stopping the earlier helper"
+    launchctl bootout "system/$LABEL" 2>/dev/null || true
+    tries=0
+    while launchctl print "system/$LABEL" >/dev/null 2>&1 && [ "$tries" -lt 10 ]; do
+        sleep 0.5
+        tries=$((tries + 1))
+    done
+fi
+
+rm -f "$HELPER_DIR/allow-changes" "$HELPER_DIR/allow-memory"
+
+# Remove, don't overwrite: a running program keeps its file, and a copy over it in place makes
+# macOS kill the next start ("Code Signature Invalid").
+rm -f "$HELPER_DIR/ua101d" "$HELPER_DIR/ua101midiagent" "$HELPER_DIR/uninstall.sh" \
+    "$HELPER_DIR/$LABEL.plist"
+rm -f "$DAEMON_PLIST"
+rm -rf "$PLUGIN" "$MIDI_PLUGIN"
+if [ -d "$APP" ]; then
+    say "replacing $APP (a running copy keeps working until it is quit)"
+    rm -rf "$APP"
+fi
+exit 0

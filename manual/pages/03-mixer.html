@@ -1,0 +1,56 @@
+<!-- title: Use the mixer -->
+<!-- summary: Set volume, pan, on/off, solo and link for each channel of the direct monitor mixer, with the mouse or the keyboard. -->
+<h1>Use the mixer</h1>
+
+<p>The mixer sets what you hear in the monitors and headphones (the UA-101's <b>direct monitor mix</b>). It does not change what the Mac records.</p>
+<img src="pictures/02-mixer-changes-allowed.png" alt="The mixer window with a working set-up">
+
+<h2>The three groups</h2>
+<ul>
+  <li><b>INPUT</b> (into the monitor mix): the sockets of the box. 1 and 2 are the <b>MIC PRE</b> sockets on the front, 3 to 8 the <b>LINE</b> sockets on the back, 9 and 10 the <b>OPTICAL</b> input.</li>
+  <li><b>OUTPUT</b> (from the computer): the sound the Mac plays to the box, channels 1 to 10.</li>
+  <li><b>MONITOR OUT</b>: the whole mix, as it goes to MONITOR OUT and PHONES. The mix is also sent to the Mac: a music app can record it as input 11 and 12 (<b>→ IN 11</b>, <b>→ IN 12</b>).</li>
+</ul>
+
+<h2>One channel</h2>
+<img class="strip" src="pictures/strip.png" alt="Two channel strips: socket, number, ON, SOLO, pan knob, fader with meter, volume, LINK">
+<p>From top to bottom:</p>
+<table>
+  <tr><th>Part</th><th>What it does</th><th>How</th></tr>
+  <tr><td><b>ON</b></td><td>Lets the channel into the mix (green) or mutes it (grey).</td><td>Click it.</td></tr>
+  <tr><td><b>SOLO</b></td><td>You hear this channel alone, of its group. One INPUT channel and one OUTPUT channel can be soloed at a time.</td><td>Click it. Click a lit SOLO again to put it out.</td></tr>
+  <tr><td><b>Pan knob</b></td><td>Left or right. Below it: <b>L100</b> (left), <b>C</b> (middle), <b>R100</b> (right).</td><td>Drag left or right.</td></tr>
+  <tr><td><b>Fader</b></td><td>The volume. The number under it is the volume in dB; <b>−∞</b> is silent. The app goes no higher than <b>0 dB</b>.</td><td>Drag up or down. The fader follows the mouse from where it is, so a click alone never makes it jump.</td></tr>
+  <tr><td><b>Meter</b></td><td>The level, beside the fader, while sound passes.</td><td>Only shows.</td></tr>
+  <tr><td><b>LINK</b></td><td>Joins a pair (1-2, 3-4 …) as a stereo pair: from the next change on, ON and volume move together. Linking alone changes neither channel.</td><td>Click it.</td></tr>
+</table>
+<p>MONITOR OUT has ON, a fader and LINK, but no SOLO and no pan.</p>
+
+<h2>The keyboard</h2>
+<p>Click a channel (its fader or knob) to select it: a short white line shows under the selected channel. Then:</p>
+<table>
+  <tr><th>Key</th><th>Does</th></tr>
+  <tr><td>← and →</td><td>Select the previous or next channel</td></tr>
+  <tr><td>↑ and ↓</td><td>Volume up or down 0.5 dB</td></tr>
+  <tr><td>Shift ↑ and Shift ↓</td><td>Volume up or down 3 dB</td></tr>
+  <tr><td>, and .</td><td>Pan left or right</td></tr>
+  <tr><td>C</td><td>Pan to the centre</td></tr>
+  <tr><td>M</td><td>ON of the selected channel</td></tr>
+  <tr><td>S</td><td>SOLO of the selected channel</td></tr>
+  <tr><td>L</td><td>LINK of the selected channel's pair</td></tr>
+</table>
+<p>The same are in the <b>Mixer</b> menu: <b>Select Channel</b>, <b>Monitor</b>, <b>Solo</b>, <b>Pan</b>, <b>Volume</b> and <b>Link</b>. Their lists also name every channel, so you can reach any channel without selecting it first. The <b>Monitor</b> menu is the ON button.</p>
+
+<h2>The buttons at the top</h2>
+<img src="pictures/top-buttons.png" alt="The buttons at the top of the mixer: Driver Settings, Messages, Patch Bay, Recall, Save, Reset">
+<ul>
+  <li><b>Driver Settings…</b>: see <a href="05-driver-settings.html">Driver Settings</a>.</li>
+  <li><b>Messages</b>: opens the Messages window; the number is how many new messages wait. See <a href="06-messages.html">The Messages window</a>.</li>
+  <li><b>Patch Bay…</b>: see <a href="04-patch-bay.html">Patch Bay</a>.</li>
+  <li><b>Recall…</b>, <b>Save…</b> and <b>Reset…</b>: the same as <b>Recall Memory…</b>, <b>Save Memory…</b> and <b>Reset to Factory…</b> in the Device menu.</li>
+</ul>
+<p>The <b>MIDI IN</b> and <b>MIDI OUT</b> lights blink green while MIDI passes through the box's MIDI sockets.</p>
+
+<h2 id="soft-ctrl">If SOFT CTRL is out</h2>
+<img src="pictures/20-mixer-soft-ctrl-out.png" alt="The mixer with the note: SOFT CTRL switch is turned off">
+<p>The box ignores the mixer until its <b>SOFT CTRL</b> switch is pressed in: inputs and the computer's outputs pass as they are. Press SOFT CTRL in on the box; the note goes by itself. The patch bay works either way.</p>

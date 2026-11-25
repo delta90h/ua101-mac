@@ -1,0 +1,34 @@
+UA-101 Driver: read me first
+============================
+
+For the Edirol / Roland UA-101, on Macs with Apple silicon (M1 and later), macOS 14 Sonoma or
+later.
+
+1. Double-click "UA-101 Driver.pkg".
+
+2. If macOS says it can't check the file and won't open it: this installer isn't signed through
+   Apple's Developer ID program. Click Done. Then:
+     - open System Settings > Privacy & Security,
+     - scroll down to Security,
+     - next to '"UA-101 Driver.pkg" was blocked', click Open Anyway,
+     - type your Mac password, and click Open Anyway once more.
+   The installer opens. This is needed once for each downloaded copy.
+
+3. Follow the installer. Quit apps that play sound first: at the end all sound and MIDI stop
+   for a moment.
+
+4. Open "UA-101 Control" from Applications. Its Help menu has the manual.
+
+The same manual is beside this file: "UA-101 Control Manual.pdf". Its page "Install, update
+and remove" says more.
+
+To remove the driver later: in UA-101 Control, choose UA-101 Control > Uninstall UA-101...
+Two choices:
+  - Remove the Driver, Keep My Settings: your Driver Settings and the app's choices stay,
+    for a later install.
+  - Remove Everything: every UA-101 file and setting goes, in every account. A tick keeps
+    your backup files and reports (Documents > UA-101 Backups, UA-101 Reports).
+macOS asks for an administrator's password. If the app is already gone, type this in Terminal
+(it asks the same choices):
+
+    "/Library/Application Support/ua101-driver/uninstall.sh"

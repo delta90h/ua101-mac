@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The MIDI agent as a LaunchAgent: launchd starts ua101midiagent in the session of the user
+  who logs in, because macOS's MIDI server belongs to each user and the helper, a system
+  daemon, can't publish MIDI ports itself. The agent publishes the MIDI port "UA-101 MIDI"
+  while the unit is connected, through the helper, and sleeps otherwise. If it ever stops
+  with an error, launchd starts it again (not sooner than every 10 s); if it stops cleanly,
+  it stays stopped. install/install.sh installs it into /Library/LaunchAgents and starts it
+  in the session of the account that runs the install.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.github.delta90h.ua101midi</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Library/Application Support/ua101-driver/ua101midiagent</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>StandardErrorPath</key>
+	<string>/Library/Logs/ua101midiagent.log</string>
+</dict>
+</plist>

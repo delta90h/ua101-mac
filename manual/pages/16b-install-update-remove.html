@@ -1,0 +1,55 @@
+<!-- title: Install, update and remove -->
+<!-- summary: What the installer puts on the Mac, how to install a newer version over the old one, and how to remove the driver and the app, keeping your settings or not. -->
+<h1>Install, update and remove</h1>
+
+<p>You need a Mac with Apple silicon (M1 or later) and macOS 14 Sonoma or later. Everything comes in one file, <b>UA-101 Driver.pkg</b>: the driver, the MIDI device and this app.</p>
+
+<h2 id="install">Install</h2>
+<ol>
+  <li>Quit the apps that play sound, and UA-101 Control if it is open. At the end of the install all sound and MIDI on the Mac stop for a moment.</li>
+  <li>Double-click <b>UA-101 Driver.pkg</b>, follow the pages, click <b>Install</b> and type your Mac password.</li>
+  <li>If macOS says it can't check the file and won't open it, click <b>Done</b>. Then open <b>System Settings → Privacy &amp; Security</b>, scroll down to <b>Security</b>, click <b>Open Anyway</b> next to the installer's name, type your password and click <b>Open Anyway</b> again. You do this once for each downloaded copy: the installer is not signed through Apple's paid Developer ID program.</li>
+  <li>macOS may say a <b>background item</b> was added: that is the driver's helper. Leave it allowed.</li>
+  <li>Open <b>UA-101 Control</b> from <b>Applications</b>. With the box on, it says <b>Ready</b>.</li>
+</ol>
+<p>The installer puts these on the Mac: <b>UA-101 Control</b> in Applications, the sound device and the MIDI device (in the Mac's Library folder), and the helper that talks to the box over USB. The driver is for every account on the Mac.</p>
+
+<h2 id="update">Install a newer version</h2>
+<p>Install the newer <b>UA-101 Driver.pkg</b> the same way, over the old one. You don't need to remove the old one first: the installer stops and replaces it.</p>
+<ul>
+  <li>Your backups, the box's settings and its five memories stay as they are.</li>
+  <li>Your Driver Settings stay too.</li>
+  <li>Afterwards, open UA-101 Control: it says <b>Ready</b> when all is well.</li>
+</ul>
+
+<h2 id="remove">Remove the driver and the app</h2>
+<p>There are two ways. Choose one when you remove:</p>
+<ul>
+  <li><b>Remove the Driver, Keep My Settings</b>: the driver, its MIDI device and UA-101 Control go. Your Driver Settings, the app's own choices (window size, appearance and so on) and its record stay, so a later install starts where you left off.</li>
+  <li><b>Remove Everything</b>: the same, and then every UA-101 setting, record, log and crash report on the Mac, in every account. Nothing of the UA-101 is left.</li>
+</ul>
+<p>Your own files are kept either way, unless you say otherwise: your backups in <b>Documents → UA-101 Backups</b> and your reports in <b>Documents → UA-101 Reports</b>. Nothing in the box is changed: its settings and memories stay.</p>
+
+<h3>From UA-101 Control (the easy way)</h3>
+<ol>
+  <li>Quit the apps that play sound. At the end all sound and MIDI on the Mac stop for a moment.</li>
+  <li>Choose <b>UA-101 Control → Uninstall UA-101…</b></li>
+  <li>Click <b>Remove the Driver, Keep My Settings</b> or <b>Remove Everything</b>. With Remove Everything, the tick <b>Keep my backup files and reports</b> keeps your own files; untick it and they go too. <b>Cancel</b> changes nothing.</li>
+  <li>macOS asks for an administrator's name and password, in its own window. Type them and click <b>OK</b>.</li>
+  <li>A few seconds later a window says what was removed and what stayed. Click <b>Quit</b>: UA-101 Control closes, and it is gone from Applications. With Remove Everything, the grey <b>UA-101</b> is gone from Audio MIDI Setup too (in your account).</li>
+</ol>
+
+<h3>From Terminal (if the app is already gone)</h3>
+<ol>
+  <li>Quit the apps that play sound, and UA-101 Control.</li>
+  <li>Open <b>Terminal</b> (in Applications → Utilities) and type, with the quotes:
+    <pre>"/Library/Application Support/ua101-driver/uninstall.sh"</pre>
+    then press Return.</li>
+  <li>It asks which way: type <b>1</b> (keep my settings) or <b>2</b> (everything) and press Return. With 2 it asks about your own files: press Return to keep them, or type <b>remove</b>.</li>
+  <li>Type <b>yes</b> and press Return, then type your Mac password (nothing shows while you type) and press Return.</li>
+  <li>It ends with <b>What happened</b>: what was removed and what stayed.</li>
+</ol>
+
+<h3>The grey UA-101 in Audio MIDI Setup</h3>
+<p>macOS remembers every MIDI device it has seen. After the driver is removed, Audio MIDI Setup may show a grey <b>UA-101</b> in MIDI Studio: it does nothing. With Remove the Driver, Keep My Settings it stays on purpose: it comes back to life when you install again. To remove it by hand (in another account, or after the Terminal way): open <b>Audio MIDI Setup</b>, choose <b>Window → Show MIDI Studio</b>, click the grey <b>UA-101</b> and press Delete.</p>
+<div class="note">Keep a copy of this page before you remove the driver: the help goes with the app. <b>Help → Save Manual as PDF…</b> saves the whole manual as a file (see <a href="16-when-something-goes-wrong.html#manual-pdf">Save this manual as a PDF</a>).</div>

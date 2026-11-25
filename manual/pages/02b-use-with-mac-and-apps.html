@@ -1,0 +1,60 @@
+<!-- title: Use the UA-101 with your Mac and music apps -->
+<!-- summary: Choose the UA-101 for sound and MIDI in macOS and in music apps such as Logic Pro, its channel names, changing the sample rate, and what happens when the Mac sleeps or the box goes away. -->
+<h1>Use the UA-101 with your Mac and music apps</h1>
+
+<p>The driver makes the UA-101 an ordinary sound and MIDI device of the Mac. Every app that plays or records sound can use it. <b>UA-101 Control does not have to be open for that</b>: the app only sets the box's mixer, patch bay, memories and the driver's delay.</p>
+
+<h2>Sound for the whole Mac</h2>
+<ol>
+  <li>Open <b>System Settings → Sound</b>.</li>
+  <li>Under <b>Output</b>, choose <b>UA-101</b>. Apps that play sound (Music, Safari, …) now play through the box, on OUTPUT 1-2.</li>
+  <li>Under <b>Input</b>, choose <b>UA-101</b> if apps such as FaceTime should record from it (INPUT 1-2).</li>
+</ol>
+<p>The sound menu in the menu bar (or <b>Control Center → Sound</b>) offers the same choice.</p>
+
+<h2>Sound in Logic Pro and other music apps</h2>
+<ol>
+  <li>In Logic Pro: <b>Logic Pro → Settings → Audio → Devices</b>.</li>
+  <li>Choose <b>UA-101</b> as the <b>Output Device</b> and the <b>Input Device</b>.</li>
+  <li>Choose the <b>I/O Buffer Size</b> there too. The driver's own delay is set in <a href="05-driver-settings.html">Driver Settings</a>.</li>
+</ol>
+<p>Other music apps have the same choice in their audio settings. The device's maker is shown as <b>EDIROL</b>.</p>
+
+<h2 id="channels">The channel names</h2>
+<p>Apps and <b>Audio MIDI Setup</b> show each channel by the name of its socket:</p>
+<table>
+  <tr><th>Recording (inputs)</th><th>Playing (outputs)</th></tr>
+  <tr><td><b>INPUT 1</b> to <b>INPUT 8</b>: the sockets. INPUT 1-2 are the front combo sockets with the mic preamps.</td>
+      <td><b>OUTPUT 1</b> to <b>OUTPUT 8</b>. Which sockets each pair really comes out of is set in the <a href="04-patch-bay.html">Patch Bay</a>.</td></tr>
+  <tr><td><b>OPTICAL IN L</b> and <b>R</b>: the optical digital input.</td>
+      <td><b>OPTICAL OUT L</b> and <b>R</b>: the optical digital output.</td></tr>
+  <tr><td><b>MONITOR OUT L</b> and <b>R</b>: the box's monitor mix, what you hear in the monitors and headphones, as two more inputs. Handy to record the whole mix.</td>
+      <td></td></tr>
+</table>
+
+<h2 id="midi">MIDI</h2>
+<p>A keyboard or another MIDI device on the box's <b>MIDI IN</b> and <b>MIDI OUT</b> sockets shows in every MIDI app as <b>UA-101 MIDI</b>.</p>
+<ul>
+  <li>In Logic Pro it is there by itself: play a key, and the track you have chosen plays.</li>
+  <li>In other apps, choose <b>UA-101 MIDI</b> as the MIDI input or output.</li>
+  <li><b>Audio MIDI Setup</b> (in Applications → Utilities), <b>Window → Show MIDI Studio</b>, shows the box as <b>UA-101</b> with its picture: bright while the box is on, grey while it is off.</li>
+  <li>The <b>MIDI</b> lights on the mixer show MIDI going in and out (see <a href="03-mixer.html">Use the mixer</a>).</li>
+</ul>
+
+<h2 id="sample-rate">Change the sample rate</h2>
+<p>The rate is set with the <b>SAMPLE RATE</b> knob on the box: 44.1, 48, 88.2, 96 or 192 kHz. Neither the app nor the Mac can change it. Roland asks you to turn it only with the power off:</p>
+<ol>
+  <li>Turn the monitors down and quit the apps that use the UA-101.</li>
+  <li>Switch the box off.</li>
+  <li>Turn the <b>SAMPLE RATE</b> knob.</li>
+  <li>Switch the box on, wait until UA-101 Control says <b>Ready</b>, then open your apps again.</li>
+</ol>
+<p>At <b>192 kHz</b> the box has 6 channels each way: INPUT 1-6 and OUTPUT 1-6. The optical sockets and the monitor mix as an input are not there at that rate, and the mixer has channels 1 to 6 only.</p>
+
+<h2 id="sleep">When the Mac sleeps, or the box goes away</h2>
+<ul>
+  <li><b>Sleep:</b> close the lid or let the Mac sleep as usual. After it wakes, the UA-101 plays again.</li>
+  <li><b>The box switched off, or the cable out, for a short while:</b> the UA-101 stays in the apps' lists for 30 seconds. While music is playing it stays as long as the music app keeps playing. Back in time, the sound comes back by itself.</li>
+  <li><b>Away longer, with nothing playing:</b> the UA-101 leaves the lists, and comes back when the box is on again. Choose it again in the app if the app has moved to another device.</li>
+  <li>UA-101 Control's light says <b>No UA-101</b> while the box is away, and <b>Ready</b> again when it is back.</li>
+</ul>

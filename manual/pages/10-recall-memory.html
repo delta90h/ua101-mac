@@ -1,0 +1,27 @@
+<!-- title: Bring a memory into use (Recall Memory) -->
+<!-- summary: Recall one of the UA-101's five memories: its patch bay and mixer replace the settings in use. -->
+<h1>Bring a memory into use (Recall Memory)</h1>
+
+<p>Recall Memory replaces <b>the settings in use</b> with what one of the UA-101's five memories holds. The memory itself doesn't change.</p>
+<div class="note warn"><b>First:</b> turn the monitors down and take headphones off. What you hear can change at once.</div>
+<ol>
+  <li>Choose <b>Device → Recall Memory…</b> (⌘L), or click <b>Recall…</b> at the top of the mixer.</li>
+  <li>Click the memory's number, <b>1</b> to <b>5</b>.</li>
+  <li>Under <b>WHAT TO LOAD</b>, leave both ticked (<b>Patch bay</b> and <b>Direct monitor mixer</b>), or untick the one you want to keep as it is.</li>
+  <li>Click <b>Continue…</b>. Nothing is sent yet.</li>
+  <li>Read the red <b>Warning: Recall Memory 3?</b> (with your number).</li>
+  <li>Click <b>Recall Memory 3</b> to go on, or <b>Cancel</b>. The window waits 30 seconds for your answer, then gives up.</li>
+</ol>
+<img src="pictures/19-recall-memory-choose.png" alt="Recall Memory, step 1: choose the memory and what to load">
+<img src="pictures/10-recall-memory-confirm.png" alt="Recall Memory, step 2: the warning">
+
+<h2>What happens</h2>
+<ul>
+  <li>First the app saves a backup of the settings in use by itself (<code>… before Recall Memory 3.ua101</code>).</li>
+  <li>Then it sends the Recall and reads the box back.</li>
+  <li>It also saves what the memory held as a file (<code>… Memory 3 as read.ua101</code>). That file can later go into another memory with <a href="12-copy-backup-to-memory.html">Copy Backup to Memory</a>.</li>
+  <li>The Messages window says what changed and names both files.</li>
+</ul>
+<img src="pictures/11-messages-after-recall.png" alt="The Messages window after Recall Memory 3">
+<p>To undo a Recall: <b>Device → Open Backup…</b> and choose the file <code>… before Recall Memory 3.ua101</code>.</p>
+<p>Recall, Save and Reset are never sent while sound plays or is recorded through the UA-101: stop the music app first. They also go at most one every 5 seconds. If one can't go yet, the window says why, in orange, under the choices.</p>

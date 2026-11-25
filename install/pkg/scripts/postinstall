@@ -1,0 +1,83 @@
+#!/bin/sh
+# The installer package's last step, run by macOS Installer as root after every
+# file is in place. It does what the second half of install/install.sh does:
+#   - writes the helper's launchd file from the copy in the helper's folder, adding UserName
+#     (the logged-in account that runs Installer, as with install.sh),
+#   - makes the helper's log, owned by that account, and trims both logs if they are large,
+#   - starts the helper's launchd job, restarts Core Audio (all sound stops for a moment), and
+#     restarts the MIDI server of each logged-in user, so it loads the MIDI plug-in.
+# Its messages go to the install log (Installer: Window > Installer Log).
+
+set -u
+
+LABEL=io.github.delta90h.ua101d
+HELPER_DIR="/Library/Application Support/ua101-driver"
+DAEMON_PLIST="/Library/LaunchDaemons/$LABEL.plist"
+LOG="/Library/Logs/ua101d.log"
+AGENT_LOG="/Library/Logs/ua101midiagent.log"
+# The same sizes as the helper's own trim at its start (src/ua101_service.h).
+LOG_LIMIT=1048576
+LOG_KEEP=524288
+
+say() { printf 'UA-101 postinstall: %s\n' "$*"; }
+problem=0
+
+user=$(stat -f %Su /dev/console 2>/dev/null || true)
+case "$user" in ""|root|loginwindow|_mbsetupuser) user="${USER-}" ;; esac
+case "$user" in ""|root) user="${SUDO_USER-}" ;; esac
+if [ -z "$user" ] || [ "$user" = root ] || ! id -u "$user" >/dev/null 2>&1; then
+    say "no logged-in user found to run the helper as."
+    exit 1
+fi
+
+chown -R root:wheel "$HELPER_DIR"
+chmod 755 "$HELPER_DIR" "$HELPER_DIR/ua101d" "$HELPER_DIR/ua101midiagent" "$HELPER_DIR/uninstall.sh"
+
+tmp=$(mktemp "/tmp/ua101d.plist.XXXXXX") || exit 1
+cp "$HELPER_DIR/$LABEL.plist" "$tmp"
+/usr/libexec/PlistBuddy -c "Delete :UserName" "$tmp" >/dev/null 2>&1 || true
+/usr/libexec/PlistBuddy -c "Add :UserName string $user" "$tmp" >/dev/null
+if ! plutil -lint -s "$tmp"; then
+    say "the helper's launchd file doesn't read."
+    rm -f "$tmp"
+    exit 1
+fi
+rm -f "$DAEMON_PLIST"
+cp "$tmp" "$DAEMON_PLIST"
+rm -f "$tmp"
+chown root:wheel "$DAEMON_PLIST"
+chmod 644 "$DAEMON_PLIST"
+say "the helper runs as $user"
+
+# Keep the newest part of a large log, from a whole line on, in the same file.
+trim() {
+    f=$1
+    [ -f "$f" ] || return 0
+    size=$(stat -f %z "$f" 2>/dev/null || echo 0)
+    [ "$size" -gt "$LOG_LIMIT" ] || return 0
+    t=$(mktemp "/tmp/ua101log.XXXXXX") || return 0
+    tail -c "$LOG_KEEP" "$f" | sed '1d' >"$t" && cat "$t" >"$f"
+    rm -f "$t"
+    say "trimmed $f from $size bytes"
+}
+touch "$LOG"
+trim "$LOG"
+trim "$AGENT_LOG"
+chown "$user" "$LOG"
+
+if ! launchctl bootstrap system "$DAEMON_PLIST"; then
+    say "launchd didn't take the helper's job."
+    problem=1
+fi
+killall coreaudiod 2>/dev/null || true
+
+# Each logged-in user's MIDI server, so it loads the MIDI plug-in. It starts again by itself
+# as soon as an app asks for MIDI.
+for uid in $(ps -axo uid=,comm= | awk '$2 ~ /loginwindow$/ {print $1}' | sort -u); do
+    name=$(id -un "$uid" 2>/dev/null) || continue
+    killall -u "$name" MIDIServer 2>/dev/null || true
+done
+
+[ "$problem" = 0 ] || exit 1
+say "done"
+exit 0

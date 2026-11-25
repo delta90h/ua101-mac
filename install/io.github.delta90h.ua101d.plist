@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The helper as a LaunchDaemon: launchd holds the Mach name, starts ua101d when the plug-in
+  first sends to it, and the helper exits by itself 30 s after the last plug-in disconnects.
+  install/install.sh installs it, after adding UserName: the account that runs the install,
+  which is how every test with the unit ran the helper. Running it as root or as a dedicated
+  user is untested.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.github.delta90h.ua101d</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Library/Application Support/ua101-driver/ua101d</string>
+		<string>--serve</string>
+	</array>
+	<key>MachServices</key>
+	<dict>
+		<key>io.github.delta90h.ua101d</key>
+		<true/>
+	</dict>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>StandardErrorPath</key>
+	<string>/Library/Logs/ua101d.log</string>
+</dict>
+</plist>

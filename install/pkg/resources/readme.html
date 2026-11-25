@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>body { font: 13px -apple-system, sans-serif; line-height: 1.45; } h2 { font-size: 14px; margin-top: 16px; } li { margin: 3px 0; } code { font: 12px Menlo, monospace; }</style>
+</head><body>
+<h2>Why macOS warned you about this file</h2>
+<p>This installer is not signed by Apple's Developer ID program. When it comes from the internet,
+AirDrop or a message, macOS first says it can't check it and won't open it. To open it anyway:</p>
+<ol>
+<li>Click <b>Done</b> (or <b>OK</b>) on that message.</li>
+<li>Open <b>System Settings → Privacy &amp; Security</b> and scroll down to <b>Security</b>.</li>
+<li>Next to "“UA-101 Driver.pkg” was blocked…", click <b>Open Anyway</b>, then type your Mac
+password.</li>
+<li>Click <b>Open Anyway</b> once more. This installer then starts.</li>
+</ol>
+<p>You only do this once for each downloaded copy. If you're reading this, it already worked.</p>
+
+<h2>What is put on the Mac</h2>
+<ul>
+<li><code>/Applications/UA-101 Control.app</code>: the control app.</li>
+<li><code>/Library/Audio/Plug-Ins/HAL/UA101.driver</code>: the sound device.</li>
+<li><code>/Library/Audio/MIDI Drivers/UA101MIDI.plugin</code>: the MIDI device.</li>
+<li><code>/Library/Application Support/ua101-driver/</code>: the helper that talks to the unit over
+USB, and the uninstaller.</li>
+<li><code>/Library/LaunchDaemons/io.github.delta90h.ua101d.plist</code>: starts the helper when an
+app uses the UA-101.</li>
+<li><code>/Library/Logs/ua101d.log</code>: the helper's messages.</li>
+</ul>
+<p>The helper runs as the account that does this install, not as root. Other accounts on this
+Mac can use the UA-101 too. macOS may show a notice that a background item was added: that is
+the helper.</p>
+
+<h2>To remove it</h2>
+<p>In UA-101 Control choose <b>UA-101 Control &rarr; Uninstall UA-101&hellip;</b>, then one of two:
+<b>Remove the Driver, Keep My Settings</b> (your Driver Settings and the app's choices stay, for a
+later install) or <b>Remove Everything</b> (every UA-101 file and setting, in every account; a tick
+keeps your backup files and reports). macOS asks for an administrator's password.</p>
+<p>If the app is already gone, open <b>Terminal</b> and type the line below. It asks the same two choices.</p>
+<p><code>"/Library/Application Support/ua101-driver/uninstall.sh"</code></p>
+</body></html>

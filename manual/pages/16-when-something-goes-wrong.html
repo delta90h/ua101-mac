@@ -1,0 +1,56 @@
+<!-- title: Problems and questions -->
+<!-- summary: What to do when the UA-101 is not found, doesn't answer, isn't in your apps, or keeps another value; common questions; how to save a report for the developer and a copy of this manual. -->
+<h1>Problems and questions</h1>
+
+<h2 id="problems">Problems</h2>
+
+<table>
+  <tr><th>You see</th><th>Try this</th></tr>
+  <tr><td>The light says <b>No UA-101</b></td><td>Switch the box on; check the USB cable; wait a few seconds. The app finds the box by itself.</td></tr>
+  <tr><td>The light says <b>The UA-101 doesn't answer</b></td><td>Switch the box off, wait 5 seconds, switch it on again.</td></tr>
+  <tr><td>A fader moves back by itself, or <b>The unit didn't take a change</b></td><td>Read the <a href="06-messages.html">Messages window</a>. Try once more. Then <b>Device → Refresh Settings</b>.</td></tr>
+  <tr><td>The mixer does nothing you can hear</td><td>Press <b>SOFT CTRL</b> in on the box (<a href="03-mixer.html#soft-ctrl">If SOFT CTRL is out</a>). Check the <a href="04-patch-bay.html">Patch Bay</a>: does the output play what you expect?</td></tr>
+  <tr><td>Recall, Save or Reset says it can't go yet</td><td>Read the orange sentence under the choices: stop the music app if sound is playing, or wait a few seconds.</td></tr>
+  <tr><td>Clicks or gaps in the sound</td><td>Choose a longer value in <a href="05-driver-settings.html">Driver Settings</a>.</td></tr>
+  <tr><td>The settings sound wrong after a command</td><td><b>Device → Open Backup…</b> with the backup the app saved just before (its name says <i>before …</i>).</td></tr>
+  <tr><td>A red <b>UA-101 Warning</b> window came up</td><td>Read it and click <b>OK</b>: it tells you about a change that was already sent. The message stays in the <a href="06-messages.html">Messages window</a>. If it comes again, save a report (below).</td></tr>
+  <tr><td>The UA-101 is not in <b>System Settings → Sound</b> or in your music app</td><td>First look at UA-101 Control: if it says <b>No UA-101</b>, switch the box on and check the cable. If it says <b>Ready</b>, quit the music app and open it again. Still missing: restart the Mac. Still missing: install the driver again (<a href="16b-install-update-remove.html">Install, update and remove</a>) and save a report.</td></tr>
+  <tr><td>Sound comes from the Mac's speakers, not the box</td><td>Choose <b>UA-101</b> again in <b>System Settings → Sound</b> (or in the music app). This can happen after the box was switched off or unplugged for a while. See <a href="02b-use-with-mac-and-apps.html#sleep">When the Mac sleeps, or the box goes away</a>.</td></tr>
+  <tr><td>The music app shows it is playing, but there is no sound</td><td>Was the box off or unplugged? Stop and start playing again, and check the app's output is <b>UA-101</b>. Check the box's volume knobs and the <a href="04-patch-bay.html">Patch Bay</a>.</td></tr>
+  <tr><td>No MIDI in the music app</td><td>Check the cable: the keyboard's MIDI OUT goes into the box's <b>MIDI IN</b>. Play a key: the mixer's <b>MIDI IN</b> light should blink. If it does, choose <b>UA-101 MIDI</b> as the input in the app, or quit and open the app again. See <a href="02b-use-with-mac-and-apps.html#midi">MIDI</a>.</td></tr>
+  <tr><td>macOS says a <b>background item</b> was added</td><td>That is the driver's helper, which talks to the box. It is normal. Leave it allowed: if you switch it off in <b>System Settings → General → Login Items &amp; Extensions</b>, the UA-101 stops working.</td></tr>
+</table>
+<img src="pictures/14-mixer-no-ua101.png" alt="The mixer when no UA-101 is found">
+
+<h2 id="questions">Questions</h2>
+<dl>
+  <dt>Does UA-101 Control have to be open for sound or MIDI?</dt>
+  <dd>No. The driver works by itself. The app is only for the box's mixer, patch bay, memories and the driver's delay.</dd>
+  <dt>Does the box keep my settings when I switch it off?</dt>
+  <dd>Yes: the UA-101 saves the settings in use by itself (unless you paused it, see <a href="07-lock-refresh-autosave.html">Auto-Save</a>). The five memories are kept too.</dd>
+  <dt>Where are my backups?</dt>
+  <dd>In your <b>Documents</b> folder, in <b>UA-101 Backups</b>. You can copy them to another Mac or to iCloud like any file.</dd>
+  <dt>Can other accounts on this Mac use the UA-101?</dt>
+  <dd>Yes. The driver is installed once for the whole Mac, and every account gets the sound, the MIDI device and <b>UA-101 Control</b>. If two people are logged in at once, both control the same box.</dd>
+  <dt>Can I change the sample rate from the Mac?</dt>
+  <dd>No. Only the <b>SAMPLE RATE</b> knob on the box changes it, with the box switched off. See <a href="02b-use-with-mac-and-apps.html#sample-rate">Change the sample rate</a>.</dd>
+  <dt>Why does the mixer have only channels 1 to 6?</dt>
+  <dd>The box is set to 192 kHz. At that rate the UA-101 has 6 channels each way.</dd>
+  <dt>Does the app or the driver send anything over the internet?</dt>
+  <dd>No. A report for the developer is only saved as a file; you decide whom to give it to.</dd>
+</dl>
+
+<h2 id="report">Save a report for the developer</h2>
+<p>A report is one text file with the app's record, the driver's logs, the box's settings and the versions. Nothing is sent anywhere: you decide whom to give it to.</p>
+<ol>
+  <li>Choose <b>Help → Save Report for Developer…</b></li>
+  <li>Keep the name it offers, in <b>Documents</b>, <b>UA-101 Reports</b>, and click <b>Save</b>.</li>
+  <li>Wait 5 to 10 seconds (it reads the Mac's log of the last day). The Finder opens with the report selected.</li>
+</ol>
+
+<h2 id="manual-pdf">Save this manual as a PDF</h2>
+<ol>
+  <li>Choose <b>Help → Save Manual as PDF…</b></li>
+  <li>Choose where to keep it (Documents is offered) and click <b>Save</b>. The Finder opens with the PDF selected.</li>
+</ol>
+<p>The PDF is the same as this help, to read or print away from the app. To open this help again: <b>Help → UA-101 Control Help</b>. You can also type a word into the search field at the top of the Help menu.</p>

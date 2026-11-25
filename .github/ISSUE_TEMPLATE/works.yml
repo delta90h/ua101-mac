@@ -1,0 +1,10 @@
+name: It works here
+description: Tell us about a Mac or macOS version that works
+body:
+  - type: input
+    id: mac
+    attributes: {label: Mac model and macOS version}
+    validations: {required: true}
+  - type: textarea
+    id: tried
+    attributes: {label: "What you tried (rates, MIDI, mixer, apps)"}

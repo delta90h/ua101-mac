@@ -1,0 +1,24 @@
+name: Problem
+description: Something doesn't work
+body:
+  - type: input
+    id: mac
+    attributes: {label: Mac model and macOS version, placeholder: "MacBook Air M2, macOS 15.1"}
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes: {label: UA-101 Control version, placeholder: "1.0"}
+    validations: {required: true}
+  - type: input
+    id: rate
+    attributes: {label: "Sample rate, music app and its buffer size"}
+  - type: textarea
+    id: what
+    attributes: {label: "What happened, and what did you expect?"}
+    validations: {required: true}
+  - type: textarea
+    id: steps
+    attributes: {label: Steps to make it happen again}
+  - type: textarea
+    id: log
+    attributes: {label: Log or report, description: "Help → Save Report for Developer… Read it first and remove anything private."}

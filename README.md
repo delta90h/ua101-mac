@@ -63,8 +63,29 @@ If the app is already gone, type this in Terminal (Applications → Utilities), 
 - The box's **Full-Speed** mode (the USB switch down) is not supported.
 - UA-101 Control doesn't need to be open for sound or MIDI.
 
-## About
+## For developers
 
-Free to use, with no warranty of any kind. Use it at your own risk: turn your monitors down before trying something new.
+The whole source is here. Build and test it with Apple's command line tools only:
+
+```bash
+make test
+```
+
+| Folder | What it is |
+|---|---|
+| `src/` | USB streaming, the helper `ua101d`, the Core Audio plug-in (`plugin/`), the CoreMIDI plug-in (`midiplugin/`), test programs |
+| `app/` | UA-101 Control (Swift) |
+| `manual/` | The manual's pages and pictures |
+| `install/` | Installer package, install and uninstall scripts |
+| `tests/` | Offline tests and recorded test data |
+| `docs/` | [Architecture](docs/architecture.md), [building](docs/building.md), [control protocol](docs/control-protocol.md), [hardware](docs/hardware.md), [test programs](docs/test-programs.md) |
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Reports from other Macs and macOS versions help most.
+
+## Licence and thanks
+
+[GPL-2.0-only](LICENSE), with no warranty of any kind. Use it at your own risk: turn your monitors down before trying something new.
+
+What was learnt about the USB streaming comes from reading the Linux `snd-ua101` driver by Clemens Ladisch (GPL-2.0-only). An independent driver in Rust: [ua101-rs](https://github.com/devfrp/ua101-rs). This project was developed with the help of AI (Claude).
 
 This project is not made, supported or endorsed by Roland Corporation. Edirol, Roland and UA-101 are trademarks of Roland Corporation, used here only to name the hardware this driver works with.

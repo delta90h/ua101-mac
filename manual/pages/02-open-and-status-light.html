@@ -1,0 +1,39 @@
+<!-- title: Open the app and read the status light -->
+<!-- summary: Start UA-101 Control and see whether it is ready: Ready, Changes locked, No UA-101 and the other states of the light. -->
+<h1>Open the app and read the status light</h1>
+
+<h2>Open the app</h2>
+<ol>
+  <li>Switch the UA-101 on and plug it into the Mac.</li>
+  <li>Open <b>UA-101 Control</b>. The mixer window opens.</li>
+  <li>Wait a moment while the app reads the settings. The light at the bottom right says <b>Reading the settings…</b>, then <b>Ready</b>.</li>
+</ol>
+<img src="pictures/01-mixer-as-it-opens.png" alt="The mixer window as it opens, with levels while music plays">
+<p>You don't have to type anything or switch anything on: when the light says <b>Ready</b>, every change you make goes to the UA-101.</p>
+<p>To control the mixer, the <b>SOFT CTRL</b> switch on the box must be pressed in. If it is out, the app tells you so; see <a href="03-mixer.html">Use the mixer</a>.</p>
+
+<h2 id="status-light">The status light</h2>
+<p>The light at the bottom right of the mixer says what the app can do now.</p>
+<img class="small" src="pictures/light-ready.png" alt="The status light: Ready">
+<table>
+  <tr><th>The light says</th><th>What it means</th><th>What to do</th></tr>
+  <tr><td><span class="lamp green"></span><b>Ready</b></td><td>The settings are read. Your changes go to the UA-101.</td><td>Nothing.</td></tr>
+  <tr><td><span class="lamp orange"></span><b>Changes locked</b></td><td>You chose <b>Device → Lock Changes</b>. Nothing is sent to the box.</td><td><b>Device → Lock Changes</b> again to unlock.</td></tr>
+  <tr><td><span class="lamp dark"></span><b>No UA-101</b></td><td>The box is switched off or not plugged in.</td><td>Switch it on, check the USB cable.</td></tr>
+  <tr><td><span class="lamp dark"></span><b>Reading the settings…</b></td><td>The app is reading the box.</td><td>Wait a moment.</td></tr>
+  <tr><td><span class="lamp red"></span><b>The UA-101 doesn't answer</b></td><td>The box is there but doesn't reply. The app asks again every 3 seconds.</td><td>Check the cable; switch the box off and on.</td></tr>
+  <tr><td><span class="lamp orange"></span><b>The UA-101 kept another value</b></td><td>The box did not take a change as sent.</td><td>Read the <a href="06-messages.html">Messages window</a>.</td></tr>
+  <tr><td><span class="lamp orange"></span><b>Look only</b></td><td>The driver passes on no changes. You can look, not change.</td><td>Save a report (<a href="16-when-something-goes-wrong.html#report">Problems and questions</a>).</td></tr>
+</table>
+<p>At 192 kHz the light also says <b>At 192 kHz: channels 1 to 6 only.</b> That is how the UA-101 works at that rate.</p>
+<img class="small" src="pictures/light-locked.png" alt="The status light: Changes locked">
+<img class="small" src="pictures/light-none.png" alt="The status light: No UA-101">
+
+<h2>The bottom of the window</h2>
+<img src="pictures/bottom-bar.png" alt="The bottom of the mixer window: device, sample rate, digital in, direct monitor and the status light">
+<ul>
+  <li><b>DEVICE</b>: the <b>USB</b> lamp glows red while the UA-101 answers over USB. Dark: no unit.</li>
+  <li><b>SAMPLE RATE</b>: the rate the box is set to. The knob is on the box; the app only shows it and never changes it.</li>
+  <li><b>DIGITAL IN</b>: whether the box uses its optical input as its clock (<b>SYNC</b>) or its own clock (<b>clock: internal</b>).</li>
+  <li><b>DIRECT MONITOR</b>: the box's <b>MONO</b> and <b>SOFT CTRL</b> switches, in or out. They are switches on the box: only your hand moves them.</li>
+</ul>

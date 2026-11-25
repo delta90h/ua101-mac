@@ -1,0 +1,32 @@
+<!-- title: Set the driver's delay (Driver Settings) -->
+<!-- summary: Choose the playback delay and the recording margin, switch rate correction, and read what was measured. -->
+<h1>Set the driver's delay (Driver Settings)</h1>
+
+<p>Driver Settings chooses how the driver trades delay against safety from clicks. Nothing here changes the UA-101 itself.</p>
+<ol>
+  <li>Choose <b>Device → Driver Settings…</b> (or press ⌘,, or click <b>Driver Settings…</b> at the top of the mixer).</li>
+  <li>Drag a slider to a new value. The sentence under it says what that value needs or does.</li>
+  <li>Click <b>Apply</b>. If sound is playing, it stops for a moment and carries on.</li>
+  <li>Click <b>Close</b>.</li>
+</ol>
+<img src="pictures/07-driver-settings.png" alt="The Driver Settings window">
+
+<h2>The settings</h2>
+<table>
+  <tr><th>Setting</th><th>Shorter</th><th>Longer</th></tr>
+  <tr><td><b>Playback delay</b><br>How early the Mac hands sound to the driver.</td>
+      <td>Software instruments answer faster. Needs a larger buffer in the music app (shown under each value, for example <b>buffer 128+</b>).</td>
+      <td>More room when the Mac is busy. At 48 kHz, from 10 ms on, any buffer works.</td></tr>
+  <tr><td><b>Recording margin</b><br>How far behind the box the recording is read.</td>
+      <td>Less delay when you listen through the Mac. 1 and 2 ms gave gaps and clicks in the test.</td>
+      <td>Safer against gaps. The music app's buffer doesn't change it.</td></tr>
+</table>
+<ul>
+  <li><b>Rate correction</b>: keeps the box's own clock in step with the Mac. Leave it on. Off passes the samples through untouched.</li>
+  <li><b>Defaults</b>: puts back the values the driver came with (playback 21.3 ms, recording 5 ms, rate correction on). Click <b>Apply</b> to use them.</li>
+</ul>
+<p>The buffer size is not set here: each music app has its own (Logic Pro: <b>Settings → Audio → I/O Buffer Size</b>).</p>
+
+<h2>Measured</h2>
+<p>While sound runs, the <b>Measured</b> box shows the least room that was left at the busiest moment, for playback and recording, and whether anything came late or went missing. Green is fine. With less than 1 ms of room, or with sound lost, choose a longer value.</p>
+<p>The window can be a sheet on the mixer, or a window of its own: <b>View → Driver Settings in Its Own Window</b>.</p>
