@@ -137,7 +137,8 @@ func renderAllWindows(into directory: String) -> [String] {
 
     func shot<V: View>(_ name: String, _ theme: Theme = .dark, _ view: V) {
         let path = (directory as NSString).appendingPathComponent(name + ".png")
-        if renderPNG(view, theme: theme, to: path) { written.append(path) } else { failed = true }
+        let ok = autoreleasepool { renderPNG(view, theme: theme, to: path) }
+        if ok { written.append(path) } else { failed = true }
     }
     func mixer(_ b: Bench) -> MixerWindowView { MixerWindowView(model: b.model, ui: b.ui, messages: b.messages) }
     func messages(_ b: Bench, scale: CGFloat = 1, height: CGFloat = 600) -> some View {

@@ -4971,13 +4971,13 @@ private func panel_guard_blocksCount(_ b: Bench) -> UInt64 { b.model.guardBlocks
 private func redOrAmberPixels(in path: String, above share: Double = 1) -> Int {
     guard let rep = NSImage(contentsOfFile: path)?.representations.first as? NSBitmapImageRep else { return -1 }
     var n = 0
-    for y in 0..<Int(Double(rep.pixelsHigh) * share) {
+    for y in 0..<Int(Double(rep.pixelsHigh) * share) { autoreleasepool {
         for x in 0..<rep.pixelsWide {
             guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), c.alphaComponent > 0.5 else { continue }
             var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
             c.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
             if sat > 0.45 && b > 0.4 && (h < 50.0 / 360 || h > 345.0 / 360) { n += 1 }
         }
-    }
+    } }
     return n
 }
