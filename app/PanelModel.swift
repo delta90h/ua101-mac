@@ -437,6 +437,10 @@ final class PanelModel: ObservableObject {
             self.meters.blinkMIDI(in: i, out: o, scheduler: self.scheduler)
         }
         transport.onRefused = { [weak self] why in self?.helperRefused(why) }
+        // Sound started or stopped: one of the reasons the dialogs give for not sending a
+        // Recall, Save or Reset. It is the transport's, not a published value, so the
+        // dialogs are told here, or Continue stayed grey after the sound stopped.
+        transport.onSound = { [weak self] _ in self?.objectWillChange.send() }
     }
 
     private func unbind() {
@@ -445,12 +449,14 @@ final class PanelModel: ObservableObject {
         transport.onLevels = nil
         transport.onMIDI = nil
         transport.onRefused = nil
+        transport.onSound = nil
     }
 
     deinit {
         if let id = wakeID { scheduler.cancel(id) }
         if let id = keyHoldID { scheduler.cancel(id) }
         if let id = ticketID { scheduler.cancel(id) }
+        if let id = waitID { scheduler.cancel(id) }
         unbind()
         panel_engine_free(engine)
     }
@@ -1711,6 +1717,12 @@ final class PanelModel: ObservableObject {
     /// When the last Recall, Save or Reset left for the UA-101: its helper passes on one every
     /// few seconds at most, so the next is held back here first.
     private var lastMemoryAt: UInt64?
+    /// The seconds still to wait after the last Recall, Save or Reset before the next may go,
+    /// as the dialogs show them; nil when none. Counted down once a second (2026-11-27): the
+    /// wait ends with time alone, and before this nothing told the dialogs, so Continue stayed
+    /// grey, with "Wait N seconds", until another memory was picked.
+    @Published private(set) var memoryWaitLeft: Int?
+    private var waitID: Int?
     /// A wake-up of the job under way: the next try to send its command, or its next read.
     private var jobTimerID: Int?
     /// Changes were switched off while a put back or a reset was sending: done when it ends.
@@ -2187,6 +2199,7 @@ final class PanelModel: ObservableObject {
         j.commandAt = now
         j.blocks = panel_blocks_received(engine)
         lastMemoryAt = now
+        watchMemoryWait()
         job = j
         let fresh = readSnapshot()
         if fresh != snap { snap = fresh }
@@ -2727,11 +2740,28 @@ final class PanelModel: ObservableObject {
     /// How long the last Recall, Save or Reset for the UA-101 must lie back before the next:
     /// the helper's own time and a second more. nil: it can go now. The pretend unit has no
     /// helper and no such rule.
-    private func memoryWaitSeconds() -> Int? {
+    private func memoryWaitSeconds(at time: UInt64? = nil) -> Int? {
         guard !transport.isPretend, let last = lastMemoryAt else { return nil }
-        let gap = (UInt64(panel_memory_gap_seconds()) + 1) * 1_000_000
-        let passed = scheduler.now - last
+        let gap = Self.memoryWaitMicros
+        let passed = (time ?? scheduler.now) - last
         return passed < gap ? Int((gap - passed + 999_999) / 1_000_000) : nil
+    }
+    private static let memoryWaitMicros = (UInt64(panel_memory_gap_seconds()) + 1) * 1_000_000
+
+    /// Keeps `memoryWaitLeft` as `memoryWaitSeconds` says, with a wake-up each time it goes
+    /// down by one, the last when the wait is over.
+    private func watchMemoryWait() {
+        if let id = waitID { scheduler.cancel(id); waitID = nil }
+        let now = scheduler.now // read once: the live clock moves between two reads
+        let left = memoryWaitSeconds(at: now)
+        if memoryWaitLeft != left { memoryWaitLeft = left }
+        guard left != nil, let last = lastMemoryAt else { return }
+        let rest = Self.memoryWaitMicros - (now - last) // more than 0: `left` isn't nil
+        let step = rest % 1_000_000 == 0 ? 1_000_000 : rest % 1_000_000
+        waitID = scheduler.schedule(at: now + step) { [weak self] in
+            self?.waitID = nil
+            self?.watchMemoryWait()
+        }
     }
 
     /// Why a Recall, Save or Reset can't be sent right now, in plain words, for the

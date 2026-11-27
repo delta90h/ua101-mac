@@ -234,6 +234,9 @@ protocol UnitTransport: AnyObject {
     /// Sound is being played or recorded through the unit: the helper passes on no Load,
     /// Store or Reset meanwhile. Always false for the pretend unit.
     var soundPlaying: Bool { get }
+    /// `soundPlaying` changed. The dialogs say why a Recall, Save or Reset can't go now, and
+    /// sound is one reason, so they are drawn again when it starts or stops (2026-11-27).
+    var onSound: ((Bool) -> Void)? { get set }
     /// The way to the unit refused a change, with the reason. Nothing was sent.
     var onRefused: ((String) -> Void)? { get set }
     /// One complete SysEx message from the unit.
@@ -261,6 +264,7 @@ final class PretendUnit: UnitTransport {
     let isPretend = true
     var changesOn = false
     let soundPlaying = false
+    var onSound: ((Bool) -> Void)? // never called: no sound passes the pretend unit
     let allowed = Allowed.all
     var onRefused: ((String) -> Void)?
     var onMessage: (([UInt8]) -> Void)?
@@ -469,6 +473,7 @@ final class HelperTransport: UnitTransport {
     /// What the helper passes on, as it said itself.
     var allowed: Allowed { Allowed(passes: passes, passesOn: passesOn, passesMemory: passesMemory, passesRead: passesRead) }
     var soundPlaying: Bool { streaming }
+    var onSound: ((Bool) -> Void)?
     var onMessage: (([UInt8]) -> Void)?
     var onLink: ((Bool, String?) -> Void)?
     var onLevels: (([[Float]]?, Float) -> Void)?
@@ -668,8 +673,10 @@ final class HelperTransport: UnitTransport {
             lastLevelsAt = nil
             onLevels?(nil, 0)
         }
+        let was = streaming
         streaming = now
         updatePolling()
+        if was != now { onSound?(now) }
     }
 
     private func gotLevels(_ levels: HelperLevels) {
