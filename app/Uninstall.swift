@@ -225,7 +225,7 @@ extension AppCore {
         a.buttons[0].keyEquivalent = ""
         let tick = NSButton(checkboxWithTitle: Uninstall.keepFilesTitle, target: nil, action: nil)
         tick.state = .on
-        let note = NSTextField(wrappingLabelWithString: "For Remove Everything: the folders UA-101 Backups and UA-101 Reports in Documents, in every account. Untick to remove them too.")
+        let note = NSTextField(wrappingLabelWithString: "For Remove Everything: the folders UA-101 Backups and UA-101 Reports in Documents, in every account. Untick to move them to the Trash.")
         note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         note.textColor = .secondaryLabelColor
         let stack = NSStackView(views: [tick, note])

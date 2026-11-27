@@ -49,7 +49,7 @@ Quit the apps that use the UA-101. In UA-101 Control choose **UA-101 Control →
 - **Remove the Driver, Keep My Settings**: the driver, its MIDI device and the app go. Your Driver Settings and the app's choices stay, for a later install.
 - **Remove Everything**: every UA-101 file and setting on the Mac goes too, in every account. A tick (on to start with) keeps your backup files and reports.
 
-macOS asks for an administrator's password. The box's own settings and memories are never touched. With the tick off, the app moves your UA-101 Backups and UA-101 Reports folders to the Trash itself. If macOS's privacy protection refuses the uninstaller something (the Documents folder, Help Viewer's copy of the help), that stays, and the last window lists it as "kept (macOS refused)" so you can remove it in the Finder.
+macOS asks for an administrator's password. The box's own settings and memories are never touched. With the tick off, your UA-101 Backups and UA-101 Reports folders go to the Trash, never deleted for good. If macOS's privacy protection refuses the uninstaller something (the Documents folder, Help Viewer's copy of the help), that stays, and the last window lists it as "kept (macOS refused)" so you can remove it in the Finder.
 
 If the app is already gone, type this in Terminal (Applications → Utilities), with the quotes, and press Return. It asks the same two choices:
 

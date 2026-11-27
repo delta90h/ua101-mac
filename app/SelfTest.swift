@@ -5300,8 +5300,8 @@ func runSelfTest(verbose: Bool) -> Int32 {
                             == plistID("app/Info.plist").map { $0 + ".help" },
                     "Help Viewer's copy of the help: in its container, under the app's id and the help book's name")
             t.check(script.contains("say \"    kept (macOS refused): $1\"") && script.contains("privacy protection didn't let the uninstaller remove them")
-                        && script.contains("remove_in_home \"$home/$d\"") && !script.contains("step rm -rf \"$home/"),
-                    "in the accounts: a refusal is kept and listed, and the script goes on")
+                        && script.contains("trash_in_home \"$home\" \"$uid\" \"$home/$d\"") && !script.contains("rm -rf \"$home/$d\"") && !script.contains("step rm -rf \"$home/"),
+                    "in the accounts: a refusal is kept and listed, the script goes on, and your own files go to the Trash, never deleted for good")
 
             // The script itself: refusals and dry runs only.
             func runScript(_ args: [String]) -> (Int32, String) {
@@ -5326,7 +5326,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
             t.check(noAnswer.0 == 1 && noAnswer.1.contains("Nothing was changed"), "no answer to the question: stops, nothing changed")
             for (args, words) in [(["--keep-settings", "--dry-run"], "remove the driver, keep the settings"),
                                   (["--everything", "--dry-run"], "remove everything, your own files stay"),
-                                  (["--everything", "--with-my-files", "--dry-run"], "remove everything, your own files too")] {
+                                  (["--everything", "--with-my-files", "--dry-run"], "remove everything, your own files to the Trash")] {
                 let (status, out) = runScript(args)
                 t.check(status == 0 && out.contains("Dry run (\(words))") && out.hasSuffix("Nothing was changed.\n")
                             && !out.components(separatedBy: "\n").contains { $0.hasPrefix("  sudo") },

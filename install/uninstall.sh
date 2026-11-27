@@ -6,7 +6,8 @@
 #     The Driver Settings, the app's own choices and record, and the logs stay, for a later install.
 #   Remove everything: the same, then every UA-101 setting, record, log and crash report on this
 #     Mac, in every account. Your own files (Documents/UA-101 Backups, Documents/UA-101 Reports)
-#     stay unless you ask for them too.
+#     stay unless you ask for them too; then they go to that account's Trash, never deleted for
+#     good (2026-11-27), so a wrong choice can be undone.
 #
 # macOS's privacy protection can refuse even an administrator some places in an account: the
 # Documents folder, and other apps' data (Help Viewer's copy of the help, in Group Containers).
@@ -33,7 +34,8 @@
 # devices too). In Core Audio's two settings files only the entries that belong to the UA-101
 # alone go, whole and by name: into a copy first, checked, written back over the file's contents
 # (Core Audio keeps the file's owner and permissions), and Core Audio is restarted at once so it
-# can't write its old copy back.
+# can't write its old copy back. The files as they were are kept in /private/tmp only if something
+# went wrong; when all went well they are deleted, with any an earlier run kept (2026-11-27).
 #
 # Internal: --asked-by=UID means the questions were asked already, by the account UID (the app,
 # or this script before it ran itself again with sudo); it runs as root. --from-app: the app asked,
@@ -131,7 +133,7 @@ if [ -z "$asked_by" ]; then
         esac
         if [ "$mode" = all ]; then
             say "Your own files stay: Documents/UA-101 Backups and Documents/UA-101 Reports, in every account."
-            printf 'Type remove to remove them too, or just press Return to keep them: '
+            printf "Type remove to move them to the Trash too, or just press Return to keep them: "
             read -r answer || answer=
             [ "$answer" != remove ] || myfiles=1
         fi
@@ -146,7 +148,7 @@ if [ -z "$asked_by" ]; then
         fi
         if [ "$mode" = all ]; then
             say "This removes everything of the UA-101 from this Mac, in every account."
-            [ "$myfiles" = 1 ] && say "Your backup files and reports go too." ||
+            [ "$myfiles" = 1 ] && say "Your backup files and reports go to the Trash too." ||
                 say "Your backup files and reports stay."
         else
             say "This removes the UA-101 driver. Your settings stay, for a later install."
@@ -165,7 +167,7 @@ fi
 
 if [ "$mode" = all ]; then
     what="remove everything"
-    [ "$myfiles" = 1 ] && what="$what, your own files too" || what="$what, your own files stay"
+    [ "$myfiles" = 1 ] && what="$what, your own files to the Trash" || what="$what, your own files stay"
 else
     what="remove the driver, keep the settings"
 fi
@@ -225,6 +227,10 @@ prepare_ca() { # file, keys (one a line), work folder
 # and Core Audio is stopped at once, without the chance to save what it had in memory; launchd
 # starts it again straight away, without the plug-in, from the files as they are now.
 forget_core_audio() {
+    # Copies an earlier run kept (it keeps them only when something went wrong).
+    for old in /private/tmp/ua101-uninstall.*; do
+        if [ -d "$old" ]; then step rm -rf "$old"; fi
+    done
     work=$(mktemp -d /private/tmp/ua101-uninstall.XXXXXX)
     say "  Core Audio's entries for the UA-101 (the Driver Settings, and what it remembers of the device):"
     ready=
@@ -259,7 +265,7 @@ forget_core_audio() {
         if grep -q -F "<key>$k</key>" "$CA_DEVICES"; then problem "Core Audio's file still has \"$k\""; fi
     done
     IFS=$old_ifs
-    say "  (Core Audio's two files as they were: $work, until the Mac restarts)"
+    ca_copy=$work
 }
 
 # The accounts, and where each one's home is.
@@ -342,6 +348,23 @@ done
 
 # ---- Everything: the logs and crash reports of the driver's programs, then each account.
 kept=
+trashed=
+# The user's own files: into that account's Trash, under a name with the time (never deleted
+# for good). If macOS refuses, they stay and are listed.
+trash_in_home() { # home, uid, path
+    to="$1/.Trash/$(basename "$3") $(date '+%Y-%m-%d %H.%M.%S')"
+    if [ "$dry" = 1 ]; then step mv "$3" "$to"; return 0; fi
+    if [ ! -d "$1/.Trash" ]; then
+        mkdir -m 700 "$1/.Trash" 2>/dev/null && chown "$2" "$1/.Trash" || true
+    fi
+    step mv "$3" "$to" || true
+    if [ -e "$3" ]; then
+        refuse "$3"
+    else
+        trashed="$trashed
+  $3"
+    fi
+}
 if [ "$mode" = all ]; then
     say "  The driver's logs and crash reports:"
     for f in /Library/Logs/ua101d.log* /Library/Logs/ua101midiagent.log*; do
@@ -398,7 +421,7 @@ if [ "$mode" = all ]; then
         for d in "Documents/UA-101 Backups" "Documents/UA-101 Reports"; do
             [ -e "$home/$d" ] || continue
             if [ "$myfiles" = 1 ]; then
-                remove_in_home "$home/$d"
+                trash_in_home "$home" "$uid" "$home/$d"
             else
                 say "    kept: $home/$d"
                 kept="$kept
@@ -406,6 +429,17 @@ if [ "$mode" = all ]; then
             fi
         done
     done
+fi
+
+# ---- Core Audio's two files as they were: deleted when all went well, kept for a way back if not.
+ca_copy=${ca_copy:-}
+if [ -n "$ca_copy" ] && [ "$dry" = 0 ]; then
+    if [ -z "$problems" ]; then
+        step rm -rf "$ca_copy"
+    else
+        problems="$problems
+- Core Audio's two files as they were are kept in $ca_copy (until the Mac restarts)"
+    fi
 fi
 
 # ---- What happened, in short (the app shows from here on).
@@ -430,6 +464,9 @@ else
     say "the MIDI port, the app, the Driver Settings, the app's choices and record, logs and crash reports."
     if [ -n "$kept" ]; then
         say "Your own files stay (you can delete them yourself in the Finder):$kept"
+    fi
+    if [ -n "$trashed" ]; then
+        say "Moved to the Trash (empty the Trash to delete them for good):$trashed"
     fi
     if [ -n "$refused" ]; then
         say "These stay: macOS's privacy protection didn't let the uninstaller remove them."

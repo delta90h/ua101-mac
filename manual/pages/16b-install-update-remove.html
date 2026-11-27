@@ -35,7 +35,7 @@
 <ol>
   <li>Quit the apps that play sound. At the end all sound and MIDI on the Mac stop for a moment.</li>
   <li>Choose <b>UA-101 Control → Uninstall UA-101…</b></li>
-  <li>Click <b>Remove the Driver, Keep My Settings</b> or <b>Remove Everything</b>. With Remove Everything, the tick <b>Keep my backup files and reports</b> keeps your own files; untick it and they go too: UA-101 Control moves your two folders to the Trash itself (empty the Trash to delete them for good), and the uninstaller removes them in other accounts. <b>Cancel</b> changes nothing.</li>
+  <li>Click <b>Remove the Driver, Keep My Settings</b> or <b>Remove Everything</b>. With Remove Everything, the tick <b>Keep my backup files and reports</b> keeps your own files; untick it and they go to the Trash (empty the Trash to delete them for good). In your account UA-101 Control moves them itself; in other accounts the uninstaller moves them to that account's Trash. <b>Cancel</b> changes nothing.</li>
   <li>macOS asks for an administrator's name and password, in its own window. Type them and click <b>OK</b>. If you click Cancel there, nothing is removed, and folders already moved to the Trash are put back.</li>
   <li>A few seconds later a window says what was removed and what stayed. A long list scrolls, so the button is always on the screen. Click <b>Quit</b>: UA-101 Control closes, and it is gone from Applications. With Remove Everything, the grey <b>UA-101</b> is gone from Audio MIDI Setup too (in your account).</li>
 </ol>
@@ -46,7 +46,7 @@
   <li>Open <b>Terminal</b> (in Applications → Utilities) and type, with the quotes:
     <pre>"/Library/Application Support/ua101-driver/uninstall.sh"</pre>
     then press Return.</li>
-  <li>It asks which way: type <b>1</b> (keep my settings) or <b>2</b> (everything) and press Return. With 2 it asks about your own files: press Return to keep them, or type <b>remove</b>.</li>
+  <li>It asks which way: type <b>1</b> (keep my settings) or <b>2</b> (everything) and press Return. With 2 it asks about your own files: press Return to keep them, or type <b>remove</b> to move them to the Trash.</li>
   <li>Type <b>yes</b> and press Return, then type your Mac password (nothing shows while you type) and press Return.</li>
   <li>It ends with <b>What happened</b>: what was removed and what stayed. Anything macOS refused (your Documents folders, if Terminal isn't allowed there) is listed as <b>kept (macOS refused)</b>: move it to the Trash yourself in the Finder.</li>
 </ol>
