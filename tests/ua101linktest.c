@@ -707,7 +707,7 @@ int main(int argc, char **argv)
            seconds, RESTART_SECONDS, BUFFER, g_correction ? "on" : "off");
 
     memset(&so, 0, sizeof(so));
-    so.input_offset = -1; /* as ua101d: 5 ms and 21.3 ms at the unit's rate */
+    so.input_offset = -1; /* as ua101d: 8 ms and 8 ms at the unit's rate */
     so.output_offset = -1;
     so.allow_uid = (int)getuid();
     so.log = stdout;

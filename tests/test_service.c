@@ -596,8 +596,8 @@ static void test_room_reaches_the_log(void)
     AudioObjectID dev = settled(), in = 0;
     AudioServerPlugInIOCycleInfo cycle;
     UInt32 got = 0;
-    double eight = 8.0;
-    CFNumberRef n8 = CFNumberCreate(NULL, kCFNumberDoubleType, &eight);
+    double ten = 10.0; /* not the helper's own 8 ms, so a change */
+    CFNumberRef n10 = CFNumberCreate(NULL, kCFNumberDoubleType, &ten);
     int restarts;
 
     CHECK((*D)->GetPropertyData(D, dev, 0, &streams, 0, NULL, sizeof(in), &got, &in) == 0 &&
@@ -617,8 +617,8 @@ static void test_room_reaches_the_log(void)
     /* 4096 frames recorded, and a cycle for 1000 to 1511. Rate correction is on here, as
        installed: its filter runs 27 frames behind and reaches 26 ahead, so the cycle wanted
        the unit's frames up to 1510: 2585 frames of room, 53.85 ms. */
-    CHECK(WAIT(log_has("room: recording read 240 frames behind (5.00 ms), playback written 1024 "
-                       "ahead (21.33 ms); the least room left: recording +53.85 ms, playback "
+    CHECK(WAIT(log_has("room: recording read 384 frames behind (8.00 ms), playback written 384 "
+                       "ahead (8.00 ms); the least room left: recording +53.85 ms, playback "
                        "+2.85 ms"),
                2.0),
           "the run's room line: the helper's own offsets, and what each direction had left");
@@ -626,7 +626,7 @@ static void test_room_reaches_the_log(void)
     /* With the user's setting the line names the offset the run really used, and a figure
        nobody measured says so. */
     restarts = atomic_load(&g_restarts);
-    CHECK((*D)->SetPropertyData(D, dev, 0, &margin, 0, NULL, sizeof(n8), &n8) == 0, "8 ms set");
+    CHECK((*D)->SetPropertyData(D, dev, 0, &margin, 0, NULL, sizeof(n10), &n10) == 0, "10 ms set");
     CHECK(WAIT(atomic_load(&g_restarts) == restarts + 1 && atomic_load(&g_restart_action) == 3, 2.0),
           "a change of the offsets is asked of Core Audio");
     CHECK((*D)->PerformDeviceConfigurationChange(D, dev, 3, NULL) == 0, "performed");
@@ -638,25 +638,25 @@ static void test_room_reaches_the_log(void)
                               buf, NULL) == 0,
           "a cycle that wants 499 frames that haven't come");
     CHECK(stop_io(dev) == 0, "I/O stops");
-    CHECK(WAIT(log_has("room: recording read 384 frames behind (8.00 ms), playback written 1024 "
-                       "ahead (21.33 ms); the least room left: recording -10.40 ms, playback "
+    CHECK(WAIT(log_has("room: recording read 480 frames behind (10.00 ms), playback written 384 "
+                       "ahead (8.00 ms); the least room left: recording -10.40 ms, playback "
                        "not measured"),
                2.0),
-          "the room line with 8 ms: 499 frames short, playback not measured");
+          "the room line with 10 ms: 499 frames short, playback not measured");
     CHECK(log_has("streaming FAIL") && log_has("the plug-in found 499 capture frames missing"),
           "and the verdict counts those frames, as before");
     /* A run in which no cycle came: neither figure was measured, and the line says so. */
-    CHECK(!log_has("(8.00 ms), playback written 1024 ahead (21.33 ms); the least room left: "
+    CHECK(!log_has("(10.00 ms), playback written 384 ahead (8.00 ms); the least room left: "
                    "recording not measured"),
           "no such line yet");
     CHECK(start_io(dev) == 0 && stamps(dev) && stop_io(dev) == 0, "a run without a cycle");
-    CHECK(WAIT(log_has("room: recording read 384 frames behind (8.00 ms), playback written 1024 "
-                       "ahead (21.33 ms); the least room left: recording not measured, playback "
+    CHECK(WAIT(log_has("room: recording read 480 frames behind (10.00 ms), playback written 384 "
+                       "ahead (8.00 ms); the least room left: recording not measured, playback "
                        "not measured"),
                2.0),
           "its room line: nothing measured either way");
 
-    CFRelease(n8);
+    CFRelease(n10);
     atomic_store(&U.records, 0);
     ua101_plugin_reload_offsets(); /* the fake host keeps nothing: unset again */
     (*D)->PerformDeviceConfigurationChange(D, dev, 3, NULL);

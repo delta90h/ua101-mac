@@ -2815,8 +2815,8 @@ func runSelfTest(verbose: Bool) -> Int32 {
         // The lists are the driver's own (src/ua101_drvset.h).
         t.equal(DriverValues.input, [1, 2, 3, 5, 8, 10], "the recording margins offered")
         t.equal(DriverValues.output.map { ($0 * 100).rounded() / 100 }, [2, 4, 6, 8, 10, 12, 14, 16, 21.33], "the playback delays offered")
-        t.equal(DriverValues.input[DriverValues.inputDefault], 5, "the default recording margin")
-        t.equal(DriverValues.label(DriverValues.output[DriverValues.outputDefault]), "21.3 ms", "the default playback delay, as shown")
+        t.equal(DriverValues.input[DriverValues.inputDefault], 8, "the default recording margin (since 1.1)")
+        t.equal(DriverValues.label(DriverValues.output[DriverValues.outputDefault]), "8 ms", "the default playback delay, as shown (since 1.1)")
         t.check(DriverValues.label(5) == "5 ms" && DriverValues.label(12) == "12 ms", "whole values are shown without a fraction")
         t.check(DriverValues.inputIndex(4) == nil && DriverValues.outputIndex(9) == nil && DriverValues.outputIndex(21.3) == 8
                     && DriverValues.inputIndex(0) == nil && DriverValues.outputIndex(0) == nil,
@@ -2829,8 +2829,11 @@ func runSelfTest(verbose: Bool) -> Int32 {
                 "the buffers at 48 kHz: \((0..<DriverValues.output.count).map { DriverValues.outputBuffer($0, rate: 48000) })")
         t.check(DriverValues.outputBuffer(3, rate: 96000) == 256 && DriverValues.outputBuffer(3, rate: 0) == 128,
                 "the same time at 96 kHz, and 48 kHz before any run")
-        t.check(DriverValues.inputDefault >= DriverValues.inputRecommended && DriverValues.outputDefault >= DriverValues.outputRecommended,
-                "the defaults are recommended values")
+        // 1.1 (2026-11-27): recording 8 ms is recommended; playback 8 ms is the owner's choice,
+        // below the recommended, and needs the music app's buffer at 128 frames at 48 kHz.
+        t.check(DriverValues.inputDefault >= DriverValues.inputRecommended && DriverValues.outputDefault < DriverValues.outputRecommended
+                    && DriverValues.outputBuffer(DriverValues.outputDefault, rate: 48000) == 128,
+                "the defaults: recording recommended, playback needing a buffer of 128 frames")
         // Places by value, so the checks below read as what the user sees.
         func o(_ ms: Double) -> Int { DriverValues.outputIndex(ms) ?? -1 }
         func i(_ ms: Double) -> Int { DriverValues.inputIndex(ms) ?? -1 }
@@ -2842,20 +2845,20 @@ func runSelfTest(verbose: Bool) -> Int32 {
         m.onRecord = { record.append($0) }
         t.check(!m.usable && !m.changed, "before the first read nothing can be changed")
         m.refresh()
-        t.check(m.usable && !m.changed && m.atDefaults && m.inputIndex == i(5) && m.outputIndex == o(21.3) && m.correction,
-                "the window opens on what the driver has: 5 ms, 21.3 ms, correction on")
+        t.check(m.usable && !m.changed && m.atDefaults && m.inputIndex == i(8) && m.outputIndex == o(8) && m.correction,
+                "the window opens on what the driver has: 8 ms, 8 ms, correction on")
         m.apply()
         t.check(d.asked.isEmpty && record.isEmpty, "Apply with nothing changed sends nothing")
 
         // A choice stays in the window until Apply.
         m.choose(output: o(12))
-        t.check(m.changed && m.outputIndex == o(12) && d.asked.isEmpty && d.state.outputMs > 21, "a moved slider sends nothing")
+        t.check(m.changed && m.outputIndex == o(12) && d.asked.isEmpty && d.state.outputMs == 8, "a moved slider sends nothing")
         m.refresh()
         t.equal(m.outputIndex, o(12), "and a read of the driver doesn't move it back")
         m.apply()
         t.equal(d.asked, ["output 12 ms"], "Apply sends the one changed setting")
         t.check(d.state.outputMs == 12 && !m.changed && !m.busy && m.note?.tone == .good, "the driver has it, and the window says Applied")
-        t.equal(record, ["driver settings: playback delay 21.3 ms → 12 ms: taken"], "the change is in the record")
+        t.equal(record, ["driver settings: playback delay 8 ms → 12 ms: taken"], "the change is in the record")
         m.choose(output: o(12))
         t.check(!m.changed, "choosing what the driver already has changes nothing")
 
@@ -2886,16 +2889,16 @@ func runSelfTest(verbose: Bool) -> Int32 {
         m.chooseDefaults()
         t.check(m.atDefaults && m.changed && d.state.outputMs == 10, "Defaults only moves the controls")
         m.apply()
-        t.check(d.state.inputMs == 5 && d.state.outputMs > 21.3 && d.state.correction == true && !m.changed, "Apply sends them")
+        t.check(d.state.inputMs == 8 && d.state.outputMs == 8 && d.state.correction == true && !m.changed, "Apply sends them")
         let before = d.asked.count
         m.chooseDefaults()
         m.apply()
         t.equal(d.asked.count, before, "Defaults at the defaults does nothing")
 
         // Another program changed a setting meanwhile: the window follows, unless a choice waits.
-        d.state.inputMs = 8
+        d.state.inputMs = 5
         m.refresh()
-        t.equal(m.inputIndex, i(8), "the window follows the driver")
+        t.equal(m.inputIndex, i(5), "the window follows the driver")
         m.choose(input: i(3))
         d.state.inputMs = 10
         m.refresh()
@@ -2966,19 +2969,19 @@ func runSelfTest(verbose: Bool) -> Int32 {
             (2, "buffer 512+", "Needs the music app's buffer at 512 frames or more. Heard delay is about the same as 128 + 8 ms."),
             (4, "buffer 512+", "Needs the music app's buffer at 512 frames or more. At 128 it distorted at the box."),
             (6, "buffer 256+", "Needs the music app's buffer at 256 frames or more."),
-            (8, "buffer 128+", "Needs the music app's buffer at 128 frames or more. Your choice: clean at 128 in the test."),
+            (8, "buffer 128+", "Needs the music app's buffer at 128 frames or more. The default: clean at 128 in the test."),
             (10, "any buffer", "Works with any buffer. The lowest that does."),
             (12, "any buffer", "Works with any buffer, a little more room."),
             (14, "any buffer", "Works with any buffer, more room for a busy Mac."),
             (16, "any buffer", "Works with any buffer, plenty of room."),
-            (21.3, "any buffer", "Works with any buffer, the most room. The default."),
+            (21.3, "any buffer", "Works with any buffer, the most room."),
         ]
         let recordingNotes: [(Double, String, String)] = [
             (1, "gaps", "Gaps in what you record: 2% of a take was missing in the test. The buffer doesn't change this."),
             (2, "a few clicks", "A few clicks in what you record: 5 frames missing in a take. The buffer doesn't change this."),
             (3, "clean, tight", "Clean in the test, with little to spare."),
-            (5, "clean", "Clean, the default."),
-            (8, "clean, roomy", "Clean, with more room for a busy Mac. Your choice."),
+            (5, "clean", "Clean, with some room to spare."),
+            (8, "clean, roomy", "Clean, with more room for a busy Mac. The default."),
             (10, "most room", "Clean, the most room."),
         ]
         t.check(playbackNotes.map { DriverValues.output[o($0.0)] } == DriverValues.output
@@ -3007,18 +3010,18 @@ func runSelfTest(verbose: Bool) -> Int32 {
         // The low values are sent like any other, and the notes stay with the driver's values.
         m.chooseDefaults()
         m.apply()
-        m.choose(output: o(8))
+        m.choose(output: o(6))
         m.choose(input: i(2))
         let sentBefore = p.asked.count
-        t.check(m.changed && p.asked.count == sentBefore && m.sentence(playback: true) == playbackNotes[3].2,
+        t.check(m.changed && p.asked.count == sentBefore && m.sentence(playback: true) == playbackNotes[2].2,
                 "the sentence follows the slider before anything is sent")
         m.apply()
-        t.check(p.asked.suffix(2).map { $0 } == ["output 8 ms", "input 2 ms"] && p.state.outputMs == 8 && p.state.inputMs == 2 && !m.changed,
+        t.check(p.asked.suffix(2).map { $0 } == ["output 6 ms", "input 2 ms"] && p.state.outputMs == 6 && p.state.inputMs == 2 && !m.changed,
                 "Apply sends a low value like any other: \(p.asked.suffix(2))")
-        t.check(m.sentence(playback: true) == playbackNotes[3].2 && m.sentence(playback: false) == recordingNotes[1].2,
+        t.check(m.sentence(playback: true) == playbackNotes[2].2 && m.sentence(playback: false) == recordingNotes[1].2,
                 "and the notes stay while the driver has them")
         m.chooseDefaults()
-        t.check(m.sentence(playback: true) == playbackNotes[8].2 && m.sentence(playback: false) == recordingNotes[3].2, "Defaults: the defaults' notes")
+        t.check(m.sentence(playback: true) == playbackNotes[3].2 && m.sentence(playback: false) == recordingNotes[4].2, "Defaults: the defaults' notes")
         m.apply()
         // The wide slider under the notes: each of its places is picked at its own spot.
         let wide = DriverSettingsView.sliderWidth
@@ -5112,8 +5115,12 @@ func runSelfTest(verbose: Bool) -> Int32 {
         let pagesDir = (root as NSString).appendingPathComponent("manual/pages")
         let files = ((try? FileManager.default.contentsOfDirectory(atPath: pagesDir)) ?? []).filter { $0.hasSuffix(".html") }.sorted()
         let text = files.map { (try? String(contentsOfFile: (pagesDir as NSString).appendingPathComponent($0), encoding: .utf8)) ?? "" }.joined(separator: "\n")
-        // 19 since 2026-11-23: "Use the UA-101 with your Mac and music apps" and "Install, update and remove".
-        t.check(files.isEmpty || files.count == 19, "19 pages, one task each (\(files.count))")
+        // 19 since 2026-11-23: "Use the UA-101 with your Mac and music apps" and "Install, update and remove";
+        // 20 since 1.1 (2026-11-27): "What's new in 1.1".
+        t.check(files.isEmpty || files.count == 20, "20 pages, one task each (\(files.count))")
+        t.check(files.isEmpty || (files.contains("01b-whats-new.html") && text.contains("What's new in 1.1")
+                    && text.contains("playback 8 ms") && text.contains("recording 8 ms")),
+                "the page added for 1.1: what's new, with the new defaults")
         t.check(files.isEmpty || (files.contains("02b-use-with-mac-and-apps.html") && files.contains("16b-install-update-remove.html")
                     && text.contains("Problems and questions") && text.contains("uninstall.sh")),
                 "the pages added 2026-11-23: the Mac and music apps, Problems and questions, Install, update and remove")

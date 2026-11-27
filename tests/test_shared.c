@@ -173,17 +173,23 @@ static void test_views(void)
 static void test_offsets(void)
 {
     printf("Offsets\n");
-    /* The same frames as before at 48 kHz, and the same times at every other rate. */
-    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 48000.0) == 240);
-    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 48000.0) == 1024);
-    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 44100.0) == 221);
-    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 44100.0) == 941);
-    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 88200.0) == 441);
-    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 88200.0) == 1882);
-    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 96000.0) == 480);
-    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 96000.0) == 2048);
-    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 192000.0) == 960);
-    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 192000.0) == 4096);
+    /* 8 ms at every rate, rounded up to whole frames. */
+    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 48000.0) == 384);
+    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 48000.0) == 384);
+    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 44100.0) == 353);
+    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 44100.0) == 353);
+    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 88200.0) == 706);
+    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 88200.0) == 706);
+    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 96000.0) == 768);
+    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 96000.0) == 768);
+    EXPECT(ua101_offset_frames(UA101_INPUT_OFFSET_SECONDS, 192000.0) == 1536);
+    EXPECT(ua101_offset_frames(UA101_OUTPUT_OFFSET_SECONDS, 192000.0) == 1536);
+    /* The times as before 1.1, through the same rounding. */
+    EXPECT(ua101_offset_frames(0.005, 48000.0) == 240);
+    EXPECT(ua101_offset_frames(1024.0 / 48000.0, 48000.0) == 1024);
+    EXPECT(ua101_offset_frames(0.005, 44100.0) == 221);
+    EXPECT(ua101_offset_frames(1024.0 / 48000.0, 44100.0) == 941);
+    EXPECT(ua101_offset_frames(1024.0 / 48000.0, 192000.0) == 4096);
     EXPECT(ua101_offset_frames(0.0, 48000.0) == 0 && ua101_offset_frames(-1.0, 48000.0) == 0 &&
            ua101_offset_frames(NAN, 48000.0) == 0 && ua101_offset_frames(1e9, 48000.0) == 1000000);
 }

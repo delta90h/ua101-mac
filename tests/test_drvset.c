@@ -34,9 +34,9 @@ static void test_lists(void)
     size_t r;
 
     CHECK(ua101_input_margins[UA101_INPUT_MARGIN_DEFAULT] == UA101_INPUT_OFFSET_SECONDS,
-          "the default recording margin is the one in use since 2026-11-10");
+          "the default recording margin is the helper's own, 8 ms since 1.1");
     CHECK(ua101_output_delays[UA101_OUTPUT_DELAY_DEFAULT] == UA101_OUTPUT_OFFSET_SECONDS,
-          "the default playback delay is the one in use since 2026-11-10");
+          "the default playback delay is the helper's own, 8 ms since 1.1");
     for (i = 0; i < UA101_INPUT_MARGIN_COUNT; i++) {
         CHECK(ua101_input_margin_index(ua101_input_margins[i] * 1000.0) == i, "margin %d names itself", i);
         CHECK(i == 0 || ua101_input_margins[i] > ua101_input_margins[i - 1], "margins rise");
@@ -88,19 +88,21 @@ static void test_lists(void)
                   "delay %d at %.0f Hz: %.0f frames", i, rates[r], frames);
         }
     }
-    /* What a panel shows, and what the helper's own offsets come to at 44.1 kHz (221 and 941
-       frames: 5.011 and 21.338 ms), name the same values. */
+    /* What a panel shows, and what an offset comes to at 44.1 kHz (221 and 941 frames: 5.011
+       and 21.338 ms; the helper's own 8 ms is 353 frames, 8.005 ms), name the same values. */
     CHECK(ua101_output_delay_index(21.3) == 8 && ua101_output_delay_index(21.33) == 8 &&
               ua101_output_delay_index(1024.0 / 48.0) == 8 &&
               ua101_output_delay_index(941.0 / 44.1) == 8,
           "21.3 ms, however written, is the longest delay");
     CHECK(ua101_input_margin_index(5.0) == 3 && ua101_input_margin_index(221.0 / 44.1) == 3,
-          "5 ms, however written, is the default margin");
+          "5 ms, however written, is the margin used until 1.1");
+    CHECK(ua101_input_margin_index(353.0 / 44.1) == UA101_INPUT_MARGIN_DEFAULT &&
+              ua101_output_delay_index(353.0 / 44.1) == UA101_OUTPUT_DELAY_DEFAULT,
+          "the helper's own 8 ms at 44.1 kHz names the two defaults");
     CHECK(ua101_input_margin_index(1.0) == 0 && ua101_input_margin_index(10.0) == 5 &&
               ua101_output_delay_index(2.0) == 0 && ua101_output_delay_index(14.0) == 6,
           "the ends and a middle one");
-    /* The shortest recommended ones are the shortest of 2026-11-19: 3 ms and 10 ms. The
-       defaults are recommended. */
+    /* The shortest recommended ones are the shortest of 2026-11-19: 3 ms and 10 ms. */
     CHECK(ua101_input_margin_index(3.0) == UA101_INPUT_MARGIN_RECOMMENDED &&
               ua101_output_delay_index(10.0) == UA101_OUTPUT_DELAY_RECOMMENDED,
           "3 ms and 10 ms are the shortest recommended values");
@@ -147,9 +149,15 @@ static void test_lists(void)
 #undef ROOM
         }
     }
+    /* The defaults since 1.1 (2026-11-27): recording 8 ms is recommended; playback 8 ms is
+       not, by the owner's choice, and needs the music app's buffer at 128 frames at 48 kHz. */
     CHECK(UA101_INPUT_MARGIN_DEFAULT >= UA101_INPUT_MARGIN_RECOMMENDED &&
-              UA101_OUTPUT_DELAY_DEFAULT >= UA101_OUTPUT_DELAY_RECOMMENDED,
-          "the defaults are recommended values");
+              ua101_input_margins[UA101_INPUT_MARGIN_DEFAULT] == 0.008,
+          "the default recording margin is 8 ms, a recommended value");
+    CHECK(ua101_output_delays[UA101_OUTPUT_DELAY_DEFAULT] == 0.008 &&
+              UA101_OUTPUT_DELAY_DEFAULT < UA101_OUTPUT_DELAY_RECOMMENDED &&
+              ua101_output_min_buffer_frames(UA101_OUTPUT_DELAY_DEFAULT, 48000.0) == 128,
+          "the default playback delay is 8 ms, which needs a buffer of 128 frames at 48 kHz");
     CHECK(ua101_input_margin_index(2.0) == 1 && ua101_output_delay_index(4.0) == 1 &&
               ua101_output_delay_index(6.0) == 2 && ua101_output_delay_index(8.0) == 3,
           "the places of 2 ms recording, and of 4, 6 and 8 ms playback");

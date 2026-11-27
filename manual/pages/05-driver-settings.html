@@ -23,8 +23,14 @@
 </table>
 <ul>
   <li><b>Rate correction</b>: keeps the box's own clock in step with the Mac. Leave it on. Off passes the samples through untouched.</li>
-  <li><b>Defaults</b>: puts back the values the driver came with (playback 21.3 ms, recording 5 ms, rate correction on). Click <b>Apply</b> to use them.</li>
+  <li><b>Defaults</b>: puts back the values the driver came with (playback 8 ms, recording 8 ms, rate correction on). Click <b>Apply</b> to use them. Playback at 8 ms needs the music app's buffer at 128 frames or more (at 48 kHz). With a smaller buffer, choose 10 ms or more.</li>
 </ul>
+<p><b>When to turn rate correction off.</b> Only when the exact original samples must reach the box, for example:</p>
+<ul>
+  <li>Dolby or DTS sound sent bit for bit to the optical output, for an amplifier to decode.</li>
+  <li>A test that compares what comes out with what went in, sample by sample.</li>
+</ul>
+<p>For everything else, leave it on. The app never turns it off by itself.</p>
 <p>The buffer size is not set here: each music app has its own (Logic Pro: <b>Settings → Audio → I/O Buffer Size</b>).</p>
 
 <h2>Measured</h2>

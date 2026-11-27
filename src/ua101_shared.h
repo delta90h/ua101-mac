@@ -125,14 +125,16 @@ int ua101_shared_views(ua101_shared *s, size_t bytes, uint32_t capture_channels,
  * them is time: a transfer is 2 ms long at every rate, so capture's newest frame is up to about
  * 2.2 ms behind (measured at 48 kHz: 105 frames), and the helper reads playback about 6 ms
  * ahead of sample time (measured at 48 kHz: 291 frames at most, with a queue of 4).
- * Input: 5 ms, a design choice on 2026-11-10 (240 frames at 48 kHz).
- * Output: what 1024 frames were at 48 kHz, 21.3 ms.
+ * Both are 8 ms since 1.1 (2026-11-27, the owner's choice after the tests at the box on
+ * 2026-11-20, src/ua101_drvset.h): 384 frames at 48 kHz. Until 1.1 they were 5 ms and
+ * 21.3 ms (what 1024 frames were at 48 kHz). They are the defaults of the driver's settings
+ * too: the plug-in uses them while the user has set nothing.
  */
-#define UA101_INPUT_OFFSET_SECONDS 0.005
-#define UA101_OUTPUT_OFFSET_SECONDS (1024.0 / 48000.0)
+#define UA101_INPUT_OFFSET_SECONDS 0.008
+#define UA101_OUTPUT_OFFSET_SECONDS 0.008
 
-/* A time as frames at a rate, rounded up: 240 and 1024 at 48 kHz, 221 and 941 at 44.1 kHz,
-   960 and 4096 at 192 kHz. */
+/* A time as frames at a rate, rounded up: 8 ms is 384 frames at 48 kHz, 353 at 44.1 kHz and
+   1536 at 192 kHz. */
 uint32_t ua101_offset_frames(double seconds, double rate_hz);
 
 /* Writer: publishes a new line. The first one, and every one after ua101_shared_new_seed,

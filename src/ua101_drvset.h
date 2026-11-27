@@ -80,22 +80,25 @@
 #define UA101_STAT_PLAYBACK_SPARE "playback spare" /* number, frames; negative: late */
 #define UA101_STAT_PLAYBACK_LATE "playback late"   /* number, frames sent as silence instead */
 
-/* The values offered, in seconds, shortest first. The defaults are the ones in use since
-   2026-11-10: 5 ms (a design choice that day) and what 1024 frames were at 48 kHz.
+/* The values offered, in seconds, shortest first. The defaults are 8 ms and 8 ms since 1.1
+   (2026-11-27): the helper's own offsets (src/ua101_shared.h), which the plug-in uses while
+   nothing is set. Playback at 8 ms needs the music app's buffer at 128 frames or more at
+   48 kHz (measured at the box, above); the owner chose it knowing that. Until 1.1 they were
+   5 ms and 21.3 ms (what 1024 frames were at 48 kHz), both still offered.
    RECOMMENDED is the place of the shortest value that is recommended whatever the music app's
    buffer: the ones before it are offered with a warning (see above). For playback the warning
    names the buffer each needs (ua101_output_min_buffers); for recording no buffer helps. */
 #define UA101_INPUT_MARGIN_COUNT 6
 #define UA101_OUTPUT_DELAY_COUNT 9
-#define UA101_INPUT_MARGIN_DEFAULT 3
-#define UA101_OUTPUT_DELAY_DEFAULT 8
+#define UA101_INPUT_MARGIN_DEFAULT 4
+#define UA101_OUTPUT_DELAY_DEFAULT 3
 #define UA101_INPUT_MARGIN_RECOMMENDED 2
 #define UA101_OUTPUT_DELAY_RECOMMENDED 4
 
 static const double ua101_input_margins[UA101_INPUT_MARGIN_COUNT] = {
-    0.001, 0.002, 0.003, UA101_INPUT_OFFSET_SECONDS, 0.008, 0.010};
+    0.001, 0.002, 0.003, 0.005, 0.008, 0.010};
 static const double ua101_output_delays[UA101_OUTPUT_DELAY_COUNT] = {
-    0.002, 0.004, 0.006, 0.008, 0.010, 0.012, 0.014, 0.016, UA101_OUTPUT_OFFSET_SECONDS};
+    0.002, 0.004, 0.006, 0.008, 0.010, 0.012, 0.014, 0.016, 1024.0 / 48000.0};
 
 /* The shortest buffer a music app needs for each playback delay (see "Measured at the box"):
    512, 512, 256 and 128 frames at 48 kHz, kept as times so that another rate needs the same

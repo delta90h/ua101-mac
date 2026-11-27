@@ -268,7 +268,7 @@ final class DriverSettingsModel: ObservableObject {
     }
 
     /// The sentence under a slider, for the value the window shows. The choice at the box
-    /// (2026-11-20: playback 8 ms, recording 8 ms, Logic's buffer 128) is named as "your choice".
+    /// (2026-11-20: playback 8 ms, recording 8 ms, Logic's buffer 128) is the default since 1.1.
     static func sentence(playback: Bool, index: Int, rate: Double) -> String {
         if playback {
             guard DriverValues.output.indices.contains(index) else { return "" }
@@ -281,12 +281,12 @@ final class DriverSettingsModel: ObservableObject {
             case 20: return needs + " Heard delay is about the same as \(tested) + 8 ms."
             case 40: return needs + " At \(tested) it distorted at the box."
             case 60: return needs
-            case 80: return needs + " Your choice: clean at \(tested) in the test."
+            case 80: return needs + " The default: clean at \(tested) in the test."
             case 100: return "Works with any buffer. The lowest that does."
             case 120: return "Works with any buffer, a little more room."
             case 140: return "Works with any buffer, more room for a busy Mac."
             case 160: return "Works with any buffer, plenty of room."
-            case 213: return "Works with any buffer, the most room. The default."
+            case 213: return "Works with any buffer, the most room."
             default: return frames > 0 ? needs : "Works with any buffer."
             }
         }
@@ -295,8 +295,8 @@ final class DriverSettingsModel: ObservableObject {
         case 10: return "Gaps in what you record: 2% of a take was missing in the test. The buffer doesn't change this."
         case 20: return "A few clicks in what you record: 5 frames missing in a take. The buffer doesn't change this."
         case 30: return "Clean in the test, with little to spare."
-        case 50: return "Clean, the default."
-        case 80: return "Clean, with more room for a busy Mac. Your choice."
+        case 50: return "Clean, with some room to spare."
+        case 80: return "Clean, with more room for a busy Mac. The default."
         case 100: return "Clean, the most room."
         default: return ""
         }

@@ -40,7 +40,7 @@
  * The two safety offsets, the user's to choose since 2026-11-19 (src/ua101_drvset.h): how far
  * behind the unit recording is read, and how far ahead playback is written. Each is a device
  * property, a number of milliseconds from a short list, kept in Core Audio's storage. Until
- * one is set, the helper's own values hold (5 ms and 21.3 ms). A change that moves an offset
+ * one is set, the helper's own values hold (8 ms and 8 ms since 1.1). A change that moves an offset
  * goes through Core Audio's configuration change, as it must: Core Audio stops I/O, takes the
  * new offsets and starts I/O again, so the sound breaks for a moment. To choose by, every run
  * measures the room the two left at its worst moment: readable as one more property while it

@@ -206,7 +206,7 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/io.github.delta90h.ua101d
 make helper && ./build/ua101d --self-test 60 --wav /tmp/ua101/helper-duplex-60s.wav
 ```
 
-`--capture-only` leaves the playback interface closed. `--buffer` sets the period, as an app's buffer size (default 512), `--input-offset` and `--output-offset` how far behind and ahead of sample time the cycle reads and writes (in frames; by default 5 ms and 21.3 ms at the unit's rate, which is 240 and 1024 frames at 48 kHz), and `--stamp-log FILE` saves the USB stack's raw bus timestamps. The report ends with `Self-test result: PASS` or `FAIL` and the reasons. The recording can be checked with `./build/ua101wavcheck`, as in Stage 2.
+`--capture-only` leaves the playback interface closed. `--buffer` sets the period, as an app's buffer size (default 512), `--input-offset` and `--output-offset` how far behind and ahead of sample time the cycle reads and writes (in frames; by default 8 ms and 8 ms at the unit's rate, which is 384 frames each at 48 kHz; 5 ms and 21.3 ms until 1.1), and `--stamp-log FILE` saves the USB stack's raw bus timestamps. The report ends with `Self-test result: PASS` or `FAIL` and the reasons. The recording can be checked with `./build/ua101wavcheck`, as in Stage 2.
 
 `ua101d --serve` is how launchd runs the installed helper; don't run it by hand, since it needs launchd to hold its name.
 

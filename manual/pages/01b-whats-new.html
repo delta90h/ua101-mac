@@ -1,0 +1,39 @@
+<!-- title: What's new in 1.1 -->
+<!-- summary: The new look, faders up to +12 dB, double-click for 0 dB, the notes pad, a look inside a memory before a Recall, and new driver defaults. -->
+<h1>What's new in 1.1</h1>
+
+<h2 id="look">A new look</h2>
+<ul>
+  <li>Each part of the mixer has its own metal plate: INPUT MONITOR, OUTPUT MONITOR and MONITOR OUT.</li>
+  <li>Faders, knobs and keys look like real ones, in the dark and the light look.</li>
+  <li>The <b>ON</b> key is now <b>MUTE</b>. It lights red when the channel is muted, and stays dark while the channel plays. It does the same as before.</li>
+</ul>
+
+<h2 id="above-0">Volume up to +12 dB</h2>
+<ul>
+  <li>Faders go up to <b>+12 dB</b>, with a stop at <b>0 dB</b>. A fader pushed up from below stops at 0 dB: let go and push again to go higher.</li>
+  <li>The ↑ key stops at 0 dB too, also while you hold it. Let go and press again to go higher.</li>
+</ul>
+<div class="note"><b>Careful:</b> above 0 dB a channel plays louder than it comes in. Turn the monitors down before you try it.</div>
+
+<h2 id="double-click">Double-click</h2>
+<ul>
+  <li>Double-click a fader: back to <b>0 dB</b>, from above or below.</li>
+  <li>Double-click a pan knob: back to the middle (<b>C</b>).</li>
+</ul>
+<p>On a linked pair, both channels move. See <a href="03-mixer.html">Use the mixer</a>.</p>
+
+<h2 id="notes">A notes pad</h2>
+<p><b>View → Show Notes</b> (⌥⌘N) opens a window for your own notes, for example what is wired to which socket. The notes stay on this Mac. See <a href="14-view-menu.html">Change how the app looks (View menu)</a>.</p>
+
+<h2 id="memory">See a memory before you recall it</h2>
+<p><b>Recall Memory…</b> now lists what the memory you pick would change, before anything changes: each setting that differs, as it is now → as the memory holds it. See <a href="10-recall-memory.html">Bring a memory into use (Recall Memory)</a>.</p>
+
+<h2 id="defaults">New driver defaults: 8 ms and 8 ms</h2>
+<p>The driver now starts with <b>playback 8 ms</b> and <b>recording 8 ms</b> (before: 21.3 ms and 5 ms). Software instruments answer sooner.</p>
+<ul>
+  <li>Playback at 8 ms needs the music app's buffer at <b>128 frames or more</b> (at 48 kHz). With a smaller buffer, choose 10 ms or more in <b>Driver Settings</b>.</li>
+  <li>If you had chosen your own values in Driver Settings, they stay after the update.</li>
+  <li>Rate correction stays on, as before.</li>
+</ul>
+<p>See <a href="05-driver-settings.html">Set the driver's delay (Driver Settings)</a>.</p>
