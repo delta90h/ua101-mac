@@ -3909,7 +3909,22 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(g.model.confirmMemory() == busy && g.model.refusal?.text.contains("Try again in") == true && g.model.pendingMemory == nil
                     && g.fake.memoryCommands.count == 1 && g.fake.refused == 0 && g.model.memoryBlocker()?.contains("Wait") == true,
                 "a Load right after it: held back by the app itself, nothing sent: \(g.model.refusal?.text ?? "nil")")
+        // The dialogs are told as the wait goes down and when it is over (2026-11-27: Recall
+        // Memory's Continue stayed grey, with "Wait N seconds", until another memory was
+        // picked, because the wait ends with time alone and nothing told the dialog).
+        let waiting = g.model.memoryWaitLeft, shownThen = g.model.memoryBlocker(load5)
+        var told: [(left: Int?, shown: String?)] = []
+        let watch = g.model.$memoryWaitLeft.dropFirst().sink { told.append(($0, g.model.memoryBlocker(load5))) }
         rest(g)
+        watch.cancel()
+        t.check(waiting != nil && shownThen?.contains("Wait \(waiting ?? 0) second") == true,
+                "while it waits the dialog shows the seconds left: \(shownThen ?? "nil")")
+        t.check(!told.isEmpty && told.last?.left == nil && told.last?.shown == nil
+                    && zip(told, told.dropFirst()).allSatisfy { a, b in a.left.map { $0 - 1 } == (b.left ?? 0) }
+                    && told.dropLast().allSatisfy { e in e.shown?.contains("Wait \(e.left ?? 0) second") == true },
+                "the dialog is told each second, the last time when the wait is over and Continue can go: \(told.map { $0.left.map(String.init) ?? "nil" })")
+        t.check(g.model.memoryWaitLeft == nil && g.model.snap.state == .ready && g.model.memoryBlocker(load5) == nil && load5.isValid,
+                "after it Continue is on for the memory already chosen, with no other one picked first")
         // Change something, then Load brings the stored mixer back.
         g.model.setVolumeExact(strip(inp, 0), unity)
         g.settle()
@@ -4029,8 +4044,15 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(s.model.memoryBlocker()?.contains("Sound is playing") == true && s.model.confirmMemory() == busy
                     && s.model.refusal?.text.contains("Stop the sound first") == true && !s.model.jobRunning && s.fake.memoryCommands.isEmpty,
                 "sound through the UA-101: refused by the app, nothing sent: \(s.model.refusal?.text ?? "nil")")
+        // When the sound stops the dialogs are told, so Continue comes on without another
+        // memory being picked first (2026-11-27).
+        var toldSound = 0
+        let soundWatch = s.model.objectWillChange.sink { toldSound += 1 }
         s.fake.setStreaming(false)
         s.settle()
+        soundWatch.cancel()
+        t.check(toldSound > 0 && s.model.memoryBlocker(store5) == nil,
+                "the sound stops: the dialog is told (\(toldSound) times) and Continue can go")
         s.model.prepareMemory(store5)
         s.fake.setStreaming(true) // it starts while the fresh read is on its way
         t.equal(s.model.confirmMemory(), ok, "the sound starts in the moment of the click: accepted")
