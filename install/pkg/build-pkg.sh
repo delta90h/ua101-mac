@@ -208,6 +208,10 @@ MANUAL_PDF="$BUILD/manual/UA-101 Control Manual.pdf"
 cp "$MANUAL_PDF" "$BUILD/UA-101 Control Manual.pdf"
 say "beside it: UA-101 Driver - Read Me First.txt and UA-101 Control Manual.pdf"
 say "built $OUT ($(du -k "$OUT" | awk '{print $1}') KB, version $VERSION, macOS $MACOS_MIN or later, Apple silicon)"
+# Its checksum (2026-11-27), for the release page: users compare it with their download's
+# (shasum -a 256), so a copy changed on the way, or from another site, shows.
+(cd "$(dirname "$OUT")" && shasum -a 256 "$(basename "$OUT")") >"$OUT.sha256"
+say "SHA-256: $(awk '{print $1}' "$OUT.sha256") (in $OUT.sha256: put it on the release page and upload it with the package)"
 if [ -z "$INSTALLER_ID" ]; then
     say "not signed by Apple (option A): a downloaded copy needs Open Anyway once"
 fi

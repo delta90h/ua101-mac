@@ -14,13 +14,15 @@ There are no other dependencies. SIP stays on.
 | `make app-test` | The control app's self-test. No unit needed. |
 | `make app` | The developer app, with a pretend unit. |
 | `make user-app` | The end-user app. |
-| `make pkg` | `build/UA-101 Driver.pkg`, its read-me and the manual as PDF. |
+| `make pkg` | `build/UA-101 Driver.pkg`, its read-me, the manual as PDF, and `build/UA-101 Driver.pkg.sha256` (the package's checksum). |
 | `make manual` | The help book and the PDF. |
 | `make user-pictures` | Redraws the manual's pictures (with a pretend unit). |
 | `make halcheck` | A silent check for the installed driver: `build/halcheck 30`. |
 | `make tsan` | The shared-memory tests under the thread sanitizer. |
 
 None of these install anything. `make test` uses the address and undefined-behaviour sanitizers.
+
+A release uploads `UA-101 Driver.pkg`, `UA-101 Driver.pkg.sha256` and the manual PDF, and its notes end with the line `SHA-256 of UA-101 Driver.pkg: ` and the number `make pkg` printed. Users check their download against it (see the README's Install section).
 
 `make pkg` is unsigned by default; to sign and notarize (never tried), see the top of `install/pkg/build-pkg.sh`. The build refuses to package a file that names your home folder.
 

@@ -5276,6 +5276,10 @@ func runSelfTest(verbose: Bool) -> Int32 {
             }
             t.check(script.contains("HELPER_DIR=\"\((Uninstall.scriptPath as NSString).deletingLastPathComponent)\""), "the app looks for the script where the package puts it")
             t.check(source("install/pkg/build-pkg.sh").contains("\"$INSTALL_DIR/uninstall.sh\""), "and the package carries it")
+            t.check(source("install/pkg/build-pkg.sh").contains("shasum -a 256 \"$(basename \"$OUT\")\") >\"$OUT.sha256\"")
+                        && source("README.md").contains("shasum -a 256 ~/Downloads/\"UA-101 Driver.pkg\"")
+                        && source("manual/pages/16b-install-update-remove.html").contains("shasum -a 256 ~/Downloads/\"UA-101 Driver.pkg\""),
+                    "a release: the package's checksum is written beside it, and the README and the manual say how to check a download")
             t.check(plistID("app/Info.plist").map { script.contains("APP_ID=\($0)\n") } ?? false, "the script knows the app's bundle id")
             t.check(plistID("src/plugin/Info.plist").map { script.contains("Plug-In.\($0)\n") } ?? false, "the Driver Settings: Core Audio's entry under the plug-in's bundle id")
             // The device's UID, as src/ua101_drvset.h gives it to the plug-in.

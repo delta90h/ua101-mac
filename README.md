@@ -38,6 +38,8 @@ A driver and control app for the **Edirol / Roland UA-101** USB audio interface 
 4. Follow the installer's pages, click **Install** and type your password.
 5. Open **UA-101 Control** from Applications. With the box on, it says **Ready**.
 
+**Check your download (optional):** each release page shows the installer's SHA-256 checksum, and has it in the file `UA-101 Driver.pkg.sha256`. In Terminal, type `shasum -a 256 ~/Downloads/"UA-101 Driver.pkg"` and press Return. The long number it prints must be the same as the one on the release page. If it isn't, don't open the file: download it again from the release page.
+
 To use the UA-101 for the whole Mac, choose it in **System Settings → Sound**. In Logic Pro: **Settings → Audio → Devices**.
 
 **Update:** install a newer `UA-101 Driver.pkg` the same way, over the old one. Your Driver Settings, your backups and the box's own settings stay.
