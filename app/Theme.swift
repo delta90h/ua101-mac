@@ -43,8 +43,8 @@ struct Theme {
     let capEdge: Color                        // its outline
     let label: Color                          // under a coloured pill or banner
 
-    /// A lit MUTE key (1.1).
-    var mute: Color { scheme == .dark ? Color(red: 0.90, green: 0.22, blue: 0.19) : Color(red: 0.78, green: 0.14, blue: 0.11) }
+    /// A lit MUTE key (1.1): Ferrari's Rosso Corsa, #D40000, in both looks (the user's wish, 2026-11-27).
+    var mute: Color { Color(red: 212 / 255, green: 0, blue: 0) }
 
     /// The red light inside an optical socket.
     var optical: Color { scheme == .dark ? Color(red: 1.00, green: 0.24, blue: 0.20) : Color(red: 0.90, green: 0.14, blue: 0.12) }
