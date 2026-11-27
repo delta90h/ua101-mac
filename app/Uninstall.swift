@@ -128,27 +128,17 @@ enum Uninstall {
         }
     }
 
-    /// Help Viewer's copy of this app's help (2026-11-27): kept in Help Viewer's own container,
-    /// which macOS's privacy protection refuses the script. With Remove Everything the app moves
-    /// this account's copy to the Trash itself, before the script runs (macOS may ask once whether
-    /// UA-101 Control may see other apps' data; refused, it stays and the script lists it). Only
-    /// the items named after this app and its help book; Help Viewer's copies of other apps' help
-    /// are never touched. Safe: Help Viewer makes a new copy if the app is installed again.
+    /// Help Viewer's copy of this app's help, in Help Viewer's own container. macOS protects that
+    /// container from the script and from this app alike, without asking (2026-11-27), so when the
+    /// script says this account's copy stayed, the last window offers to show the folder in the
+    /// Finder, where the user can drag it to the Trash. It does no harm left there.
     enum HelpViewerCopy {
         static let caches = "Library/Group Containers/group.com.apple.helpviewer.content/Library/Caches"
-        /// The app's bundle id, a dot, and its help book's name, as Help Viewer names its copy.
-        static func prefix(bundle: Bundle = .main) -> String {
-            let id = bundle.bundleIdentifier ?? "local.ua101.control"
-            let book = bundle.object(forInfoDictionaryKey: "CFBundleHelpBookName") as? String ?? "local.ua101.control.help"
-            return id + "." + book
-        }
-        /// Of the names in the folder, this app's own.
-        static func ours(_ names: [String], prefix: String) -> [String] { names.filter { $0.hasPrefix(prefix) }.sorted() }
-        /// This account's copies (empty if there are none, or macOS doesn't let the app look).
-        static func items(home: String = NSHomeDirectory(), prefix: String = prefix(), fm: FileManager = .default) -> [URL] {
-            let dir = home + "/" + caches
-            guard let names = try? fm.contentsOfDirectory(atPath: dir) else { return [] }
-            return ours(names, prefix: prefix).map { URL(fileURLWithPath: dir + "/" + $0) }
+        static let showTitle = "Show in Finder and Quit"
+        /// The folder to show, if the script's account says this account's copy stayed.
+        static func folderLeft(in summary: String, home: String = NSHomeDirectory()) -> URL? {
+            let f = home + "/" + caches
+            return summary.contains("\n  " + f) ? URL(fileURLWithPath: f, isDirectory: true) : nil
         }
     }
 
@@ -280,11 +270,7 @@ extension AppCore {
         progress.show()
         DispatchQueue.global(qos: .userInitiated).async {
             // The user's own files in this account: to the Trash by the app (see Uninstall.MyFiles).
-            // And Help Viewer's copy of the help, with Remove Everything (see Uninstall.HelpViewerCopy).
-            var toTrash: [URL] = []
-            if choice == .everything(keepMyFiles: false) { toTrash += Uninstall.MyFiles.folders() }
-            if choice.isEverything { toTrash += Uninstall.HelpViewerCopy.items() }
-            let moved = Uninstall.MyFiles.moveToTrash(toTrash)
+            let moved = choice == .everything(keepMyFiles: false) ? Uninstall.MyFiles.moveToTrash(Uninstall.MyFiles.folders()) : []
             let outcome = Uninstall.run(choice)
             var midi: GreyMIDI.Result?
             var notBack: [Uninstall.MyFiles.Moved] = []
@@ -302,11 +288,11 @@ extension AppCore {
         let a = NSAlert()
         switch outcome {
         case .cancelled, .notRun:
-            // Nothing ran: the app goes on as before (what it moved to the Trash is back).
+            // Nothing ran: the app goes on as before (the folders it moved are back).
             uninstalling = false
             AppCore.recordStopped = false
             let trash = Uninstall.MyFiles.stillInTrash(notBack)
-            if !moved.isEmpty { AppCore.record("Uninstall didn't run: what the app had moved to the Trash was put back" + (trash.map { ". " + $0 } ?? "")) }
+            if !moved.isEmpty { AppCore.record("Uninstall didn't run: the backup and report folders were put back" + (trash.map { ". " + $0 } ?? "")) }
             guard case .notRun(let why) = outcome else {
                 guard let trash else { return }
                 a.messageText = "The UA-101 wasn't uninstalled"
@@ -323,10 +309,13 @@ extension AppCore {
             if !choice.isEverything { AppCore.record("Uninstall (exit status \(status)):\n" + output) }
             a.messageText = status == 0 ? "The UA-101 is uninstalled" : "The UA-101 is uninstalled, but not everything went"
             a.alertStyle = status == 0 ? .informational : .warning
-            a.informativeText = ([Uninstall.summary(of: output)] + [Uninstall.MyFiles.line(moved), midi.flatMap(GreyMIDI.line)].compactMap { $0 })
+            let summary = Uninstall.summary(of: output)
+            a.informativeText = ([summary] + [Uninstall.MyFiles.line(moved), midi.flatMap(GreyMIDI.line)].compactMap { $0 })
                 .joined(separator: "\n\n") + "\n\nUA-101 Control quits now."
             a.addButton(withTitle: "Quit")
-            a.runModalFitted()
+            let helpCopy = Uninstall.HelpViewerCopy.folderLeft(in: summary)
+            if helpCopy != nil { a.addButton(withTitle: Uninstall.HelpViewerCopy.showTitle) }
+            if a.runModalFitted() == .alertSecondButtonReturn, let helpCopy { NSWorkspace.shared.open(helpCopy) }
             if choice.isEverything { forgetOwnFiles() }
             // Not NSApp.terminate: nothing more is saved on the way out (window places, state).
             exit(0)

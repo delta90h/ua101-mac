@@ -283,10 +283,13 @@ remove_in_home() {
     step rm -rf "$1" || true
     if [ -e "$1" ] || [ -L "$1" ]; then refuse "$1"; fi
 }
-# Help Viewer's copy of the app's help, in its own container. Only looked at for real: in a dry
-# run macOS could ask whether this script may see another app's data.
+# Help Viewer's copy of the app's help, in its own container. macOS protects that container, even
+# from root and without asking (seen 2026-11-27, also for the app itself): then the copy stays
+# (it does no harm), and the summary says how to drag it to the Trash in the Finder. Only looked
+# at for real: in a dry run macOS could ask whether this script may see another app's data.
 HV_CACHES="Library/Group Containers/group.com.apple.helpviewer.content/Library/Caches"
 HV_NAME="$APP_ID.$APP_ID.help"
+hv_left=
 help_viewer_copy() { # home
     if [ "$dry" = 1 ]; then
         say "    (if there: $1/$HV_CACHES/$HV_NAME*)"
@@ -298,14 +301,36 @@ help_viewer_copy() { # home
         IFS='
 '
         set -f # its names hold a "*"
+        left=0
         for n in $listing; do
-            case "$n" in "$HV_NAME"*) remove_in_home "$1/$HV_CACHES/$n" ;; esac
+            case "$n" in "$HV_NAME"*)
+                step rm -rf "$1/$HV_CACHES/$n" || true
+                if [ -e "$1/$HV_CACHES/$n" ]; then left=1; fi ;;
+            esac
         done
         set +f
         IFS=$old_ifs
     else
-        case "$listing" in *"not permitted"*) refuse "$1/$HV_CACHES/$HV_NAME* (Help Viewer's copy of the help)" ;; esac
+        case "$listing" in *"not permitted"*) left=1 ;; *) left=0 ;; esac
     fi
+    if [ "$left" = 1 ]; then
+        say "    kept (macOS protects Help Viewer's folder): $1/$HV_CACHES/$HV_NAME*"
+        hv_left="$hv_left
+  $1/$HV_CACHES"
+    fi
+}
+
+# The accounts a person logs in to, besides the account UID: numbered from 501, not hidden, with a
+# login shell (apps make hidden accounts of their own, such as a VPN's).
+people_besides() { # uid
+    for n in $(accounts); do
+        u=$(id -u "$n" 2>/dev/null) || continue
+        [ "$u" != "$1" ] || continue
+        login=$(dscl . -read "/Users/$n" UserShell 2>/dev/null | awk '{print $2}')
+        case "$login" in "" | */false | */nologin) continue ;; esac
+        if dscl . -read "/Users/$n" IsHidden 2>/dev/null | grep -q ': *1$'; then continue; fi
+        echo "$n"
+    done
 }
 
 # ---- The driver: MIDI first, then audio, then the helper, the app and the package's records.
@@ -472,8 +497,14 @@ else
         say "These stay: macOS's privacy protection didn't let the uninstaller remove them."
         say "You can move them to the Trash yourself in the Finder:$refused"
     fi
+    if [ -n "$hv_left" ]; then
+        say "Help Viewer's copy of the UA-101 manual stays: macOS protects Help Viewer's folder, even from"
+        say "the uninstaller. It does no harm. To remove it: in the Finder choose Go > Go to Folder...,"
+        say "paste the folder below, press Return, and drag the items whose names start with"
+        say "$HV_NAME to the Trash:$hv_left"
+    fi
     # The other accounts a person uses (the app clears its own account's grey UA-101 itself).
-    others=$(dscl . -list /Users UniqueID | awk -v me="$me" '$2 >= 501 && $2 != me' | wc -l | tr -d ' ')
+    others=$(people_besides "$me" | wc -l | tr -d ' ')
     if [ "$from_app" = 0 ] || [ "$others" -gt 0 ]; then
         if [ "$from_app" = 1 ]; then
             say "In other accounts, Audio MIDI Setup may still show a grey \"UA-101\". To remove it there:"

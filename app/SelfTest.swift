@@ -5240,18 +5240,13 @@ func runSelfTest(verbose: Bool) -> Int32 {
                     && GreyMIDI.line(.stillOnline)?.contains("Show MIDI Studio") == true && GreyMIDI.line(.failed(-50)) == GreyMIDI.line(.stillOnline),
                 "the line at the end: gone, nothing, or the one click by hand")
 
-        // Help Viewer's copy of the help (2026-11-27): only this app's, to the Trash by the app.
+        // Help Viewer's copy of the help (2026-11-27): macOS protects it; the last window shows its folder.
         do {
-            let pre = "local.ua101.control.local.ua101.control.help"
-            t.equal(Uninstall.HelpViewerCopy.ours(["com.apple.machelp*26.0.help", pre + "*1.1.help", "other.app.help*2.help", pre + "*1.0.help"], prefix: pre),
-                    [pre + "*1.0.help", pre + "*1.1.help"], "Help Viewer's copy: only this app's, never another app's")
-            let fm = FileManager.default
-            let home = NSTemporaryDirectory() + "ua101-helpviewer-\(getpid())"
-            try? fm.createDirectory(atPath: home + "/" + Uninstall.HelpViewerCopy.caches + "/" + pre + "*1.1.help", withIntermediateDirectories: true)
-            try? fm.createDirectory(atPath: home + "/" + Uninstall.HelpViewerCopy.caches + "/com.apple.machelp*26.0.help", withIntermediateDirectories: true)
-            t.equal(Uninstall.HelpViewerCopy.items(home: home, prefix: pre).map(\.lastPathComponent), [pre + "*1.1.help"], "Help Viewer's copy: found in its container")
-            t.equal(Uninstall.HelpViewerCopy.items(home: home + "/nowhere", prefix: pre), [], "Help Viewer's copy: none there, nothing")
-            try? fm.removeItem(atPath: home)
+            let f = "/Users/x/" + Uninstall.HelpViewerCopy.caches
+            t.equal(Uninstall.HelpViewerCopy.folderLeft(in: "All gone.\nHelp Viewer's copy ... to the Trash:\n  " + f + "\nIn other accounts", home: "/Users/x")?.path, f,
+                    "Help Viewer's copy stayed in this account: the last window offers its folder in the Finder")
+            t.equal(Uninstall.HelpViewerCopy.folderLeft(in: "All gone.\n  /Users/y/" + Uninstall.HelpViewerCopy.caches, home: "/Users/x"), nil,
+                    "only another account's copy stayed: no button")
         }
         // Alerts fit between the menu bar and the Dock (2026-11-27: the last window's button was
         // below the screen): long words scroll, the buttons stay in the room.
@@ -5316,10 +5311,10 @@ func runSelfTest(verbose: Bool) -> Int32 {
                         && (NSDictionary(contentsOfFile: (root as NSString).appendingPathComponent("app/Info.plist"))?["CFBundleHelpBookName"] as? String)
                             == plistID("app/Info.plist").map { $0 + ".help" },
                     "Help Viewer's copy of the help: in its container, under the app's id and the help book's name")
-            let infoPlist = NSDictionary(contentsOfFile: (root as NSString).appendingPathComponent("app/Info.plist"))
-            t.equal(Uninstall.HelpViewerCopy.prefix(), "\(infoPlist?["CFBundleIdentifier"] as? String ?? "?").\(infoPlist?["CFBundleHelpBookName"] as? String ?? "?")",
-                    "Help Viewer's copy: the app looks for the same name as the script")
-            t.check(script.contains("awk -v me=\"$me\" '$2 >= 501 && $2 != me'"), "the grey UA-101 in other accounts: said only when there are other accounts")
+            t.check(script.contains("say \"$HV_NAME to the Trash:$hv_left\"") && script.contains("hv_left=\"$hv_left\n  $1/$HV_CACHES\""),
+                    "Help Viewer's copy left: the summary names its folder, as the app looks for it")
+            t.check(script.contains("others=$(people_besides \"$me\" | wc -l") && script.contains("*/false | */nologin) continue")
+                        && script.contains("IsHidden"), "the grey UA-101 in other accounts: said only when a person logs in to another account")
 
             t.check(script.contains("say \"    kept (macOS refused): $1\"") && script.contains("privacy protection didn't let the uninstaller remove them")
                         && script.contains("trash_in_home \"$home\" \"$uid\" \"$home/$d\"") && !script.contains("rm -rf \"$home/$d\"") && !script.contains("step rm -rf \"$home/"),
