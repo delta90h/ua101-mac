@@ -118,11 +118,26 @@ Confirmed:
 - Store and Load keep strictly to the part named: patch bay, mixer or both.
 - A Load is taken with SOFT CTRL out too. Store and Reset were not tried that way.
 - Settings and memories survive a power-off.
-- A memory can't be read directly: only by loading it.
+- A memory can be read without loading it (confirmed 2026-11-27, see below).
+
+## Reading the other blocks (confirmed 2026-11-27)
+
+A request like the settings read, at `02 <b> 00 00` with size `00 00 02 00`, gets a 256-byte `12` reply from that address, in the settings block's layout. `ua101settings --all-blocks` asks for them; it only reads.
+
+| Block | Holds |
+|---|---|
+| `02 00` | The settings in use |
+| `02 01` | The same as `02 00` on the unit tested |
+| `02 02` | The same but for `d[4]`: probably the USER SET power-on settings (inferred) |
+| `02 03` to `02 07` | **Memory 1 to 5**. Shown for Memory 1 (`02 03`) and Memory 5 (`02 07`): after Save Memory with INPUT 1 at −6 dB, and for Memory 5 also INPUT 1 off, each block held just those bytes. Memory 2 to 4 at `02 04` to `02 06` are inferred from the numbering |
+| `02 08` to `02 0C` | Answer; `02 09` to `02 0C` differ in the patch bay and the mixer, probably factory settings (inferred) |
+| `02 0D` to `02 0F` | **No answer, and afterwards the unit took no control message (the write timed out) until it was switched off and on.** Its settings and memories were unchanged. Don't ask for them |
+
+Reading the blocks changed nothing: the settings in use read the same before and after, every time.
 
 ## Not safe to try
 
-Messages nothing shows to be safe: requests at `02 xx 00 00` (`xx` not 0; `ua101settings --all-blocks` asks for `02 01` to `02 0F` as a developer's test, not yet run on a UA-101) and `01 00 00 00`; sets at `00 00 00 01`, `00 01 00 00`, and the one-message patch bay presets at `00 00 00 08`.
+Messages nothing shows to be safe: requests at `02 0D 00 00` to `02 0F 00 00` (they stop the control port, above) and `01 00 00 00`; sets at `00 00 00 01`, `00 01 00 00`, and the one-message patch bay presets at `00 00 00 08`.
 
 ## Examples
 

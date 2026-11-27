@@ -6,8 +6,8 @@
  * or its parser builds a message that sets anything, and the only send goes
  * through a check that refuses anything but a request. See docs/control-protocol.md.
  *
- * With --all-blocks (a developer's test, 2026-11-27) it also asks for the other 15 blocks at
- * 02 01 00 00 to 02 0F 00 00, one at a time, and the settings block again at the end, to see
+ * With --all-blocks (a developer's test, 2026-11-27) it also asks for the blocks at
+ * 02 01 00 00 to 02 0C 00 00, one at a time (not 0D to 0F: see LAST_BLOCK), and the settings block again at the end, to see
  * whether the unit's memories can be read without loading them. Those are asks too, built by
  * ua101_ctl_block_request and passed through the same check; still nothing sets anything.
  *
@@ -42,6 +42,10 @@ typedef IOUSBInterfaceInterface650 **interface_ref;
 #define MAX_PAN 0x8000u
 #define MAX_VOLUME 0x7FFFFFu
 #define BLOCK_PAUSE_US 100000
+/* The last block asked for. On the UA-101 (2026-11-27) 02 01 to 02 0C answered; 02 0D, 0E and
+   0F did not, and after them the unit took no more control messages (a write timed out) until
+   it was switched off and on. So they are not asked for. */
+#define LAST_BLOCK 0x0Cu
 
 typedef struct {
     interface_ref intf;
@@ -562,57 +566,57 @@ static int dry_run(void)
     printf("=== UA-101 all blocks, dry run: nothing is opened or sent ===\n");
     printf("In this order, one at a time, each after the last one's answer (or %.0f s):\n",
            REPLY_WAIT_SECONDS);
-    for (b = 0; b <= UA101_CTL_BLOCKS; b++) {
-        unsigned block = b % UA101_CTL_BLOCKS;
+    for (b = 0; b <= LAST_BLOCK + 1; b++) {
+        unsigned block = b <= LAST_BLOCK ? b : 0;
 
         if (!build_block_request(block, request)) {
             refused++;
             continue;
         }
-        printf("  02 %02x%s: ", block, b == UA101_CTL_BLOCKS ? " again" : "      ");
+        printf("  02 %02x%s: ", block, b > LAST_BLOCK ? " again" : "      ");
         print_hex(request, sizeof(request));
         printf("   ask only: %s; the helper would pass it: %s\n",
                ua101_ctl_is_request_only(request, sizeof(request)) ? "yes" : "NO",
                ua101_ctl_is_read_request(request, sizeof(request)) ? "yes" : "no");
     }
-    printf("=== Dry run: %s ===\n", refused == 0 ? "17 asks, all pass the check" : "REFUSED");
+    printf("=== Dry run: %s ===\n", refused == 0 ? "14 asks, all pass the check" : "REFUSED");
     return refused == 0 ? 0 : 1;
 }
 
-/* After the settings block: the other 15, then the settings block again. Returns 1 if all went. */
+/* After the settings block: 02 01 to LAST_BLOCK, each printed as it comes, then the settings
+   block again. Stops at the first block that isn't answered. Returns 1 if all went. */
 static int read_other_blocks(session *s)
 {
     unsigned b, answered = 0, same;
 
-    printf("\nThe other blocks, one at a time:\n");
-    for (b = 1; b <= UA101_CTL_BLOCKS && !g_signal && s->read_error == 0; b++) {
-        int *flag = b < UA101_CTL_BLOCKS ? &s->have_block[b] : &s->have_again;
+    printf("\nThe other blocks, one at a time (02 03 to 02 07 are probably Memory 1 to 5):\n");
+    for (b = 1; b <= LAST_BLOCK + 1 && !g_signal && s->read_error == 0; b++) {
+        unsigned block = b <= LAST_BLOCK ? b : 0;
+        int *flag = block ? &s->have_block[block] : &s->have_again;
 
         usleep(BLOCK_PAUSE_US);
-        if (send_block_request(s, b % UA101_CTL_BLOCKS) != kIOReturnSuccess) {
+        if (send_block_request(s, block) != kIOReturnSuccess) {
             printf("  Sending failed, so nothing more is sent.\n");
             return 0;
         }
         run_loop_until_flag(s, REPLY_WAIT_SECONDS, flag);
-        if (b < UA101_CTL_BLOCKS)
-            answered += *flag != 0;
-        printf("  02 %02x%s: %s\n", b % UA101_CTL_BLOCKS, b < UA101_CTL_BLOCKS ? "" : " again",
-               *flag ? "answered" : "NO REPLY");
+        printf("  02 %02x%s: %s\n", block, block ? "" : " again", *flag ? "answered" : "NO REPLY");
+        if (!*flag) {
+            printf("  No answer, so nothing more is sent.\n");
+            return 0;
+        }
+        if (block) {
+            answered++;
+            print_differences(s->blocks[block], s->block);
+            print_block(s->blocks[block]);
+        }
     }
     if (g_signal || s->read_error != 0)
         return 0;
 
-    printf("\nBlocks (02 03 to 02 07 are probably Memory 1 to 5):\n");
-    for (b = 1; b < UA101_CTL_BLOCKS; b++) {
-        printf("\n  Block 02 %02x:%s\n", b, s->have_block[b] ? "" : " no reply");
-        if (!s->have_block[b])
-            continue;
-        print_differences(s->blocks[b], s->block);
-        print_block(s->blocks[b]);
-    }
     same = s->have_again && memcmp(s->again, s->block, sizeof(s->block)) == 0;
-    printf("\n%u of 15 other blocks answered. The settings in use, read again at the end: %s\n",
-           answered, !s->have_again ? "NO REPLY" : same ? "the same as at the start" : "CHANGED");
+    printf("\n%u of %u other blocks answered. The settings in use, read again at the end: %s\n",
+           answered, LAST_BLOCK, !s->have_again ? "NO REPLY" : same ? "the same as at the start" : "CHANGED");
     if (s->have_again && !same)
         print_differences(s->again, s->block);
     return s->have_again && same;
@@ -647,7 +651,7 @@ int main(int argc, char **argv)
                    "  Reads the unit's settings. It can't change them.\n"
                    "  --watch SECONDS  then keeps listening for changes, such as a front panel\n"
                    "                   switch being moved, up to %.0f s\n"
-                   "  --all-blocks     also asks for blocks 02 01 to 02 0F (developer's test)\n"
+                   "  --all-blocks     also asks for blocks 02 01 to 02 0C (developer's test)\n"
                    "  --dry-run        with --all-blocks: only prints what it would send\n",
                    MAX_WATCH_SECONDS);
             return 2;
