@@ -191,6 +191,23 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.equal(unitValue(b, Int32(PANEL_F_ON), inp, 4), 1, "the on/off bit reached the unit")
         t.equal(b.model.setPan(strip(mon, 0), 0x4000), Int32(PANEL_ERR_NO_CHANNEL), "MONITOR OUT has no pan")
 
+        // A double-click: a fader back to 0 dB from below and from above, a pan to the centre.
+        b.model.setVolume(strip(inp, 5), minus6)
+        b.settle()
+        t.equal(b.model.resetVolume(strip(inp, 5)), Int32(PANEL_OK), "a double-click on a fader is taken")
+        t.equal(b.model.cursor, strip(inp, 5), "and selects its channel")
+        b.settle()
+        t.equal(unitValue(b, Int32(PANEL_F_VOLUME), inp, 5), unity, "a double-click takes a fader at −6 dB to 0 dB")
+        b.model.setVolume(strip(inp, 5), plus6)
+        b.settle()
+        b.model.resetVolume(strip(inp, 5))
+        b.settle()
+        t.equal(unitValue(b, Int32(PANEL_F_VOLUME), inp, 5), unity, "and one at +6 dB down to 0 dB, never higher")
+        b.model.centrePan(strip(inp, 4))
+        b.settle()
+        t.equal(unitValue(b, Int32(PANEL_F_PAN), inp, 4), UInt32(PANEL_CENTER_PAN), "a double-click puts a pan back in the centre")
+        t.equal(b.model.centrePan(strip(mon, 0)), Int32(PANEL_ERR_NO_CHANNEL), "MONITOR OUT has no pan to centre")
+
         // Link: volume and on/off go to both.
         t.check(b.model.snap.links[out][1] && !b.model.snap.links[inp][1], "as delivered: OUTPUT pairs linked, INPUT pairs not")
         b.model.setVolume(strip(inp, 6), minus6)

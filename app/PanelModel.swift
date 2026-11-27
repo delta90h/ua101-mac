@@ -1570,6 +1570,19 @@ final class PanelModel: ObservableObject {
         afterCall()
     }
 
+    /// A double-click on a fader: back to 0 dB, from above or below; never higher. One change, as a
+    /// key press is, and to both channels of a linked pair, as every volume is.
+    @discardableResult func resetVolume(_ s: StripID) -> Int32 {
+        cursor = s
+        return setVolume(s, UInt32(PANEL_UNITY_VOLUME))
+    }
+
+    /// A double-click on a pan knob: back to the centre.
+    @discardableResult func centrePan(_ s: StripID) -> Int32 {
+        cursor = s
+        return setPan(s, UInt32(PANEL_CENTER_PAN))
+    }
+
     // MARK: backup, put back, Reset Mixer
 
     /// Where backups are written (the app: ~/Documents/UA-101 Backups). nil: nowhere, and then

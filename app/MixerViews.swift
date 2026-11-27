@@ -308,7 +308,8 @@ struct PanKnob: View {
                 track = nil
                 model.endDrag()
             })
-        .help("Pan: drag left or right")
+        .simultaneousGesture(TapGesture(count: 2).onEnded { model.centrePan(id) })
+        .help("Pan: drag left or right. Double-click: back to the centre.")
     }
 }
 
@@ -453,7 +454,8 @@ struct Fader: View {
                 track = nil
                 model.endDrag()
             })
-        .help("Volume: drag up or down. It stops at 0 dB; let go and push again to go up to +12 dB.")
+        .simultaneousGesture(TapGesture(count: 2).onEnded { model.resetVolume(id) })
+        .help("Volume: drag up or down. It stops at 0 dB; let go and push again to go up to +12 dB. Double-click: back to 0 dB.")
     }
 }
 
