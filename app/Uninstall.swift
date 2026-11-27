@@ -9,7 +9,8 @@
 // takes the grey UA-101 out of Audio MIDI Setup in this account, through CoreMIDI
 // (MIDISetupRemoveDevice, what Audio MIDI Setup's Delete does), only once the MIDI server sees
 // the driver gone; macOS's MIDI settings files are never touched. The app quits at the end: it
-// has been removed too.
+// has been removed too. With the tick off, the app moves this account's two folders to the Trash
+// itself first (macOS's privacy protection refuses the script the Documents folder; see MyFiles).
 import AppKit
 import CoreMIDI
 
@@ -89,6 +90,42 @@ enum Uninstall {
     static func summary(of output: String) -> String {
         guard let r = output.range(of: summaryMarker + "\n") else { return output.trimmingCharacters(in: .whitespacesAndNewlines) }
         return String(output[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Remove Everything with the tick off (2026-11-27): macOS's privacy protection refuses the
+    /// script, run as an administrator, the Documents folder ("Operation not permitted"). This app
+    /// writes there, so it moves this account's two folders to the Trash itself, just before the
+    /// script runs, and puts them back if the script doesn't run. What it couldn't move, the script
+    /// still tries, and lists as "kept (macOS refused)" if refused again.
+    enum MyFiles {
+        static let names = ["UA-101 Backups", "UA-101 Reports"]
+        static func folders(home: String = NSHomeDirectory()) -> [URL] {
+            names.map { URL(fileURLWithPath: home + "/Documents/" + $0, isDirectory: true) }
+        }
+        struct Moved: Equatable { var from: URL; var to: URL }
+
+        /// Those that are there, to the Trash. Off the main thread (macOS may ask first).
+        static func moveToTrash(_ folders: [URL], fm: FileManager = .default) -> [Moved] {
+            folders.compactMap { u in
+                guard fm.fileExists(atPath: u.path) else { return nil }
+                var out: NSURL?
+                guard (try? fm.trashItem(at: u, resultingItemURL: &out)) != nil, let to = out as URL? else { return nil }
+                return Moved(from: u, to: to)
+            }
+        }
+        /// The script didn't run: each back where it was. Returns those that couldn't go back.
+        static func putBack(_ moved: [Moved], fm: FileManager = .default) -> [Moved] {
+            moved.filter { m in fm.fileExists(atPath: m.from.path) || (try? fm.moveItem(at: m.to, to: m.from)) == nil }
+        }
+        /// The line the window at the end adds once the script has run.
+        static func line(_ moved: [Moved]) -> String? {
+            moved.isEmpty ? nil : "Moved to the Trash (empty the Trash to delete them for good):" + moved.map { "\n  " + $0.from.path }.joined()
+        }
+        /// The script didn't run, and these couldn't be put back.
+        static func stillInTrash(_ moved: [Moved]) -> String? {
+            moved.isEmpty ? nil : "These are in the Trash: put them back from there (Put Back) if you want them:"
+                + moved.map { "\n  " + $0.from.path }.joined()
+        }
     }
 
     /// Runs the script (off the main thread: the password window is macOS's own).
@@ -200,7 +237,7 @@ extension AppCore {
         stack.setFrameSize(NSSize(width: 320, height: stack.fittingSize.height))
         a.accessoryView = stack
         let choice: Uninstall.Choice
-        switch a.runModal() {
+        switch a.runModalFitted() {
         case .alertFirstButtonReturn: choice = .keepSettings
         case .alertSecondButtonReturn: choice = .everything(keepMyFiles: tick.state == .on)
         default: return
@@ -209,7 +246,7 @@ extension AppCore {
             let b = NSAlert()
             b.messageText = "The uninstaller isn't on this Mac"
             b.informativeText = "It comes with the installer package, in \(Uninstall.scriptPath). Nothing was changed."
-            b.runModal()
+            b.runModalFitted()
             return
         }
         uninstalling = true
@@ -218,34 +255,50 @@ extension AppCore {
         let progress = UninstallProgress()
         progress.show()
         DispatchQueue.global(qos: .userInitiated).async {
+            // The user's own files in this account: to the Trash by the app (see Uninstall.MyFiles).
+            let moved = choice == .everything(keepMyFiles: false) ? Uninstall.MyFiles.moveToTrash(Uninstall.MyFiles.folders()) : []
             let outcome = Uninstall.run(choice)
             var midi: GreyMIDI.Result?
-            if case .ran = outcome, choice.isEverything { midi = GreyMIDI.removeOffline() }
-            DispatchQueue.main.async { progress.close(); self.finishUninstall(choice, outcome, midi) }
+            var notBack: [Uninstall.MyFiles.Moved] = []
+            if case .ran = outcome {
+                if choice.isEverything { midi = GreyMIDI.removeOffline() }
+            } else {
+                notBack = Uninstall.MyFiles.putBack(moved)
+            }
+            DispatchQueue.main.async { progress.close(); self.finishUninstall(choice, outcome, midi, moved: moved, notBack: notBack) }
         }
     }
 
-    private func finishUninstall(_ choice: Uninstall.Choice, _ outcome: Uninstall.Outcome, _ midi: GreyMIDI.Result?) {
+    private func finishUninstall(_ choice: Uninstall.Choice, _ outcome: Uninstall.Outcome, _ midi: GreyMIDI.Result?,
+                                 moved: [Uninstall.MyFiles.Moved], notBack: [Uninstall.MyFiles.Moved]) {
         let a = NSAlert()
         switch outcome {
         case .cancelled, .notRun:
-            // Nothing ran: the app goes on as before.
+            // Nothing ran: the app goes on as before (the folders it moved are back).
             uninstalling = false
             AppCore.recordStopped = false
-            guard case .notRun(let why) = outcome else { return }
+            let trash = Uninstall.MyFiles.stillInTrash(notBack)
+            if !moved.isEmpty { AppCore.record("Uninstall didn't run: the backup and report folders were put back" + (trash.map { ". " + $0 } ?? "")) }
+            guard case .notRun(let why) = outcome else {
+                guard let trash else { return }
+                a.messageText = "The UA-101 wasn't uninstalled"
+                a.informativeText = "Nothing else was changed. " + trash
+                a.runModalFitted()
+                return
+            }
             AppCore.record("Uninstall didn't run: \(why)")
             a.messageText = "The UA-101 wasn't uninstalled"
-            a.informativeText = "Nothing was changed. \(why)"
-            a.runModal()
+            a.informativeText = (trash.map { "Nothing else was changed. " + $0 } ?? "Nothing was changed.") + "\n\n" + why
+            a.runModalFitted()
             return
         case .ran(let output, let status):
             if !choice.isEverything { AppCore.record("Uninstall (exit status \(status)):\n" + output) }
             a.messageText = status == 0 ? "The UA-101 is uninstalled" : "The UA-101 is uninstalled, but not everything went"
             a.alertStyle = status == 0 ? .informational : .warning
-            a.informativeText = ([Uninstall.summary(of: output)] + [midi.flatMap(GreyMIDI.line)].compactMap { $0 })
+            a.informativeText = ([Uninstall.summary(of: output)] + [Uninstall.MyFiles.line(moved), midi.flatMap(GreyMIDI.line)].compactMap { $0 })
                 .joined(separator: "\n\n") + "\n\nUA-101 Control quits now."
             a.addButton(withTitle: "Quit")
-            a.runModal()
+            a.runModalFitted()
             if choice.isEverything { forgetOwnFiles() }
             // Not NSApp.terminate: nothing more is saved on the way out (window places, state).
             exit(0)

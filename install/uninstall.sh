@@ -8,6 +8,12 @@
 #     Mac, in every account. Your own files (Documents/UA-101 Backups, Documents/UA-101 Reports)
 #     stay unless you ask for them too.
 #
+# macOS's privacy protection can refuse even an administrator some places in an account: the
+# Documents folder, and other apps' data (Help Viewer's copy of the help, in Group Containers).
+# What it refuses stays; the script goes on, and its summary lists each one as "kept (macOS
+# refused)" (2026-11-27). The app moves its own account's Documents folders to the Trash itself,
+# before this script runs, as it may write there.
+#
 # The app's menu (UA-101 Control > Uninstall UA-101...) runs this same script, so there is one
 # list of what goes. From Terminal, in the ua101-driver folder:
 #
@@ -130,7 +136,7 @@ if [ -z "$asked_by" ]; then
             [ "$answer" != remove ] || myfiles=1
         fi
     fi
-    if [ "$mode" = keep ] && [ "$installed" = 0 ]; then
+    if [ "$mode" = keep ] && [ "$installed" = 0 ] && [ "$dry" = 0 ]; then
         say "The UA-101 driver isn't installed. Nothing to do."
         exit 0
     fi
@@ -261,6 +267,41 @@ accounts() { dscl . -list /Users UniqueID | awk '$2 >= 501 {print $1}'; }
 home_of() { dscl . -read "/Users/$1" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: *//p' | head -n 1; }
 logged_in=$(ps -axo uid=,comm= | awk '$2 ~ /loginwindow$/ {print $1}' | sort -u)
 
+# One file or folder in an account. If macOS refuses (its privacy protection), it stays, the
+# script goes on, and the summary lists it.
+refused=
+refuse() { say "    kept (macOS refused): $1"; refused="$refused
+  $1"; }
+remove_in_home() {
+    if [ "$dry" = 1 ]; then step rm -rf "$1"; return 0; fi
+    step rm -rf "$1" || true
+    if [ -e "$1" ] || [ -L "$1" ]; then refuse "$1"; fi
+}
+# Help Viewer's copy of the app's help, in its own container. Only looked at for real: in a dry
+# run macOS could ask whether this script may see another app's data.
+HV_CACHES="Library/Group Containers/group.com.apple.helpviewer.content/Library/Caches"
+HV_NAME="$APP_ID.$APP_ID.help"
+help_viewer_copy() { # home
+    if [ "$dry" = 1 ]; then
+        say "    (if there: $1/$HV_CACHES/$HV_NAME*)"
+        return 0
+    fi
+    [ -d "$1/Library/Group Containers/group.com.apple.helpviewer.content" ] || return 0
+    if listing=$(ls -1 "$1/$HV_CACHES" 2>&1); then
+        old_ifs=$IFS
+        IFS='
+'
+        set -f # its names hold a "*"
+        for n in $listing; do
+            case "$n" in "$HV_NAME"*) remove_in_home "$1/$HV_CACHES/$n" ;; esac
+        done
+        set +f
+        IFS=$old_ifs
+    else
+        case "$listing" in *"not permitted"*) refuse "$1/$HV_CACHES/$HV_NAME* (Help Viewer's copy of the help)" ;; esac
+    fi
+}
+
 # ---- The driver: MIDI first, then audio, then the helper, the app and the package's records.
 [ "$dry" = 0 ] || say "  (the MIDI agent: only where it is loaded)"
 for uid in $logged_in; do
@@ -318,7 +359,7 @@ if [ "$mode" = all ]; then
             say "    (its folders can't be looked into without the password: whatever of this list is there goes)"
             say "    ~/Library/Preferences/$APP_ID.plist, ~/Library/Logs/UA-101 Control.log,"
             say "    ~/Library/Saved Application State/$APP_ID.savedState, ~/Library/Caches/$APP_ID,"
-            say "    ~/Library/HTTPStorages/$APP_ID, crash reports of ua101panel"
+            say "    ~/Library/HTTPStorages/$APP_ID, crash reports of ua101panel, Help Viewer's copy of the help"
             continue
         fi
         # UA-101 Control open in that account (not the one that asked): it would write its
@@ -334,22 +375,30 @@ if [ "$mode" = all ]; then
             if pgrep -x -u "$uid" cfprefsd >/dev/null 2>&1; then
                 step launchctl asuser "$uid" sudo -u "$name" defaults delete "$APP_ID" 2>/dev/null || true
             fi
-            if [ "$dry" = 1 ] || [ -e "$prefs" ]; then step rm -f "$prefs"; fi
+            if [ "$dry" = 1 ] || [ -e "$prefs" ]; then remove_in_home "$prefs"; fi
         fi
         for p in "Library/Logs/UA-101 Control.log" "Library/Saved Application State/$APP_ID.savedState" \
             "Library/Caches/$APP_ID" "Library/HTTPStorages/$APP_ID" "Library/HTTPStorages/$APP_ID.binarycookies" \
             "Library/WebKit/$APP_ID"; do
-            if [ -e "$home/$p" ]; then step rm -rf "$home/$p"; fi
+            if [ -e "$home/$p" ]; then remove_in_home "$home/$p"; fi
         done
-        {
+        found=$({
             find "$home/Library/Application Support/CrashReporter" -maxdepth 1 -name 'ua101panel_*.plist'
             find "$home/Library/Logs/DiagnosticReports" -maxdepth 2 -name 'ua101panel[-_.]*'
             find "$home/Library/Caches/com.apple.helpd/Generated" -maxdepth 1 -name "$APP_ID.help*"
-        } 2>/dev/null | while IFS= read -r f; do step rm -rf "$f"; done
+        } 2>/dev/null || true)
+        old_ifs=$IFS
+        IFS='
+'
+        set -f
+        for f in $found; do remove_in_home "$f"; done
+        set +f
+        IFS=$old_ifs
+        help_viewer_copy "$home"
         for d in "Documents/UA-101 Backups" "Documents/UA-101 Reports"; do
             [ -e "$home/$d" ] || continue
             if [ "$myfiles" = 1 ]; then
-                step rm -rf "$home/$d"
+                remove_in_home "$home/$d"
             else
                 say "    kept: $home/$d"
                 kept="$kept
@@ -381,6 +430,10 @@ else
     say "the MIDI port, the app, the Driver Settings, the app's choices and record, logs and crash reports."
     if [ -n "$kept" ]; then
         say "Your own files stay (you can delete them yourself in the Finder):$kept"
+    fi
+    if [ -n "$refused" ]; then
+        say "These stay: macOS's privacy protection didn't let the uninstaller remove them."
+        say "You can move them to the Trash yourself in the Finder:$refused"
     fi
     if [ "$from_app" = 1 ]; then
         say "In other accounts, Audio MIDI Setup may still show a grey \"UA-101\". To remove it there:"

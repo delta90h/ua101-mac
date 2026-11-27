@@ -85,7 +85,7 @@ final class AppCore {
             let a = NSAlert()
             a.messageText = "The notes could not be saved"
             a.informativeText = e + "\n\nThe words are still in the Notes window; the app tries again after the next change."
-            a.runModal()
+            a.runModalFitted()
         }
         ui.patchBayOwnWindow = PanelUI.ownWindow(PanelUI.patchBayOwnWindowKey, in: .standard)
         ui.driverSettingsOwnWindow = PanelUI.ownWindow(PanelUI.driverSettingsOwnWindowKey, in: .standard)

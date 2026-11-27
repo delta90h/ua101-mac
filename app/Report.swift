@@ -267,7 +267,7 @@ extension AppCore {
                     let a = NSAlert()
                     a.messageText = "The report could not be saved"
                     a.informativeText = "Choose another folder and try again."
-                    a.runModal()
+                    a.runModalFitted()
                 }
             }
         }

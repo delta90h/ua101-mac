@@ -29,14 +29,15 @@
   <li><b>Remove Everything</b>: the same, and then every UA-101 setting, record, log and crash report on the Mac, in every account. Nothing of the UA-101 is left.</li>
 </ul>
 <p>Your own files are kept either way, unless you say otherwise: your backups and notes in <b>Documents → UA-101 Backups</b> and your reports in <b>Documents → UA-101 Reports</b>. Nothing in the box is changed: its settings and memories stay.</p>
+<p>macOS protects some places even from an administrator: the Documents folder, and other apps' data (such as Help Viewer's copy of this help). If macOS refuses the uninstaller one of them, that one stays and the rest still goes. The end lists it as <b>kept (macOS refused)</b>, so you can move it to the Trash yourself in the Finder.</p>
 
 <h3>From UA-101 Control (the easy way)</h3>
 <ol>
   <li>Quit the apps that play sound. At the end all sound and MIDI on the Mac stop for a moment.</li>
   <li>Choose <b>UA-101 Control → Uninstall UA-101…</b></li>
-  <li>Click <b>Remove the Driver, Keep My Settings</b> or <b>Remove Everything</b>. With Remove Everything, the tick <b>Keep my backup files and reports</b> keeps your own files; untick it and they go too. <b>Cancel</b> changes nothing.</li>
-  <li>macOS asks for an administrator's name and password, in its own window. Type them and click <b>OK</b>.</li>
-  <li>A few seconds later a window says what was removed and what stayed. Click <b>Quit</b>: UA-101 Control closes, and it is gone from Applications. With Remove Everything, the grey <b>UA-101</b> is gone from Audio MIDI Setup too (in your account).</li>
+  <li>Click <b>Remove the Driver, Keep My Settings</b> or <b>Remove Everything</b>. With Remove Everything, the tick <b>Keep my backup files and reports</b> keeps your own files; untick it and they go too: UA-101 Control moves your two folders to the Trash itself (empty the Trash to delete them for good), and the uninstaller removes them in other accounts. <b>Cancel</b> changes nothing.</li>
+  <li>macOS asks for an administrator's name and password, in its own window. Type them and click <b>OK</b>. If you click Cancel there, nothing is removed, and folders already moved to the Trash are put back.</li>
+  <li>A few seconds later a window says what was removed and what stayed. A long list scrolls, so the button is always on the screen. Click <b>Quit</b>: UA-101 Control closes, and it is gone from Applications. With Remove Everything, the grey <b>UA-101</b> is gone from Audio MIDI Setup too (in your account).</li>
 </ol>
 
 <h3>From Terminal (if the app is already gone)</h3>
@@ -47,7 +48,7 @@
     then press Return.</li>
   <li>It asks which way: type <b>1</b> (keep my settings) or <b>2</b> (everything) and press Return. With 2 it asks about your own files: press Return to keep them, or type <b>remove</b>.</li>
   <li>Type <b>yes</b> and press Return, then type your Mac password (nothing shows while you type) and press Return.</li>
-  <li>It ends with <b>What happened</b>: what was removed and what stayed.</li>
+  <li>It ends with <b>What happened</b>: what was removed and what stayed. Anything macOS refused (your Documents folders, if Terminal isn't allowed there) is listed as <b>kept (macOS refused)</b>: move it to the Trash yourself in the Finder.</li>
 </ol>
 
 <h3>The grey UA-101 in Audio MIDI Setup</h3>

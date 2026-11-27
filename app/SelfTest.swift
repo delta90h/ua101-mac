@@ -5204,6 +5204,30 @@ func runSelfTest(verbose: Bool) -> Int32 {
                 "no status line: not taken as done")
         t.equal(Uninstall.summary(of: "  rm -rf x\n\n== What happened ==\nAll gone.\nKept: y\n"), "All gone.\nKept: y", "the window shows the short account")
         t.equal(Uninstall.summary(of: "Stopped: z\n"), "Stopped: z", "no heading: all of it")
+        // The user's own files (2026-11-27): moved to the Trash by the app, put back if the script didn't run.
+        t.equal(Uninstall.MyFiles.folders(home: "/Users/x").map(\.path), ["/Users/x/Documents/UA-101 Backups", "/Users/x/Documents/UA-101 Reports"],
+                "my files: this account's two folders in Documents")
+        t.check(Uninstall.MyFiles.folders().map(\.path).first == AppCore.backupFolder.path, "my files: the folder the backups are written to")
+        do {
+            let fm = FileManager.default
+            let dir = NSTemporaryDirectory() + "ua101-myfiles-\(getpid())"
+            try? fm.removeItem(atPath: dir)
+            try? fm.createDirectory(atPath: dir + "/Documents/UA-101 Backups", withIntermediateDirectories: true)
+            try? fm.createDirectory(atPath: dir + "/Trash", withIntermediateDirectories: true)
+            fm.createFile(atPath: dir + "/Documents/UA-101 Backups/a.ua101", contents: Data("x".utf8))
+            let from = URL(fileURLWithPath: dir + "/Documents/UA-101 Backups"), to = URL(fileURLWithPath: dir + "/Trash/UA-101 Backups")
+            try? fm.moveItem(at: from, to: to) // as the Trash would hold it
+            let m = Uninstall.MyFiles.Moved(from: from, to: to)
+            t.check(Uninstall.MyFiles.putBack([m]).isEmpty && fm.fileExists(atPath: from.path + "/a.ua101") && !fm.fileExists(atPath: to.path),
+                    "my files: the script didn't run, so the folder is put back, with what's in it")
+            t.equal(Uninstall.MyFiles.putBack([m]), [m], "my files: one that can't go back (its place is taken again) stays in the Trash, and is named")
+            t.equal(Uninstall.MyFiles.moveToTrash([URL(fileURLWithPath: dir + "/Documents/UA-101 Reports")]), [], "my files: a folder that isn't there: nothing moved")
+            try? fm.removeItem(atPath: dir)
+            t.check(Uninstall.MyFiles.line([]) == nil && Uninstall.MyFiles.stillInTrash([]) == nil
+                        && Uninstall.MyFiles.line([m])?.contains("Moved to the Trash") == true && Uninstall.MyFiles.line([m])?.contains(from.path) == true
+                        && Uninstall.MyFiles.stillInTrash([m])?.contains("Put Back") == true,
+                    "my files: the window says what went to the Trash, or what is still there")
+        }
 
         let ua = Uninstall.midiDriverOwner, other = "com.apple.AppleMIDIUSBDriver"
         t.equal(GreyMIDI.decide([]), .none, "no MIDI devices: nothing")
@@ -5216,6 +5240,25 @@ func runSelfTest(verbose: Bool) -> Int32 {
                     && GreyMIDI.line(.stillOnline)?.contains("Show MIDI Studio") == true && GreyMIDI.line(.failed(-50)) == GreyMIDI.line(.stillOnline),
                 "the line at the end: gone, nothing, or the one click by hand")
 
+        // Alerts fit between the menu bar and the Dock (2026-11-27: the last window's button was
+        // below the screen): long words scroll, the buttons stay in the room.
+        do {
+            let room = NSRect(x: 0, y: 60, width: 1200, height: 600)
+            let long = NSAlert()
+            long.messageText = "The UA-101 is uninstalled, but not everything went"
+            long.informativeText = (1...300).map { "rm -rf /a/long/path/number/\($0)" }.joined(separator: "\n")
+            long.addButton(withTitle: "Quit")
+            long.prepareToFit(room: room)
+            t.check(long.accessoryView is NSScrollView && long.informativeText.isEmpty && long.window.frame.height <= room.height,
+                    "a long alert: its words scroll, and all of it (\(Int(long.window.frame.height)) points high) fits a room 600 high")
+            let short = NSAlert()
+            short.messageText = "The notes could not be saved"
+            short.informativeText = "Try again."
+            short.prepareToFit(room: room)
+            t.check(short.accessoryView == nil && short.informativeText == "Try again.", "a short alert: as it was")
+            let kept = DialogWindow.keep(NSRect(x: 100, y: -300, width: 400, height: 500), in: room)
+            t.check(room.contains(kept), "an alert placed partly below the room: moved inside it")
+        }
         let here = (#filePath as NSString).deletingLastPathComponent
         let root = (here as NSString).deletingLastPathComponent
         func source(_ path: String) -> String { (try? String(contentsOfFile: (root as NSString).appendingPathComponent(path), encoding: .utf8)) ?? "" }
@@ -5245,6 +5288,20 @@ func runSelfTest(verbose: Bool) -> Int32 {
                         && script.contains("Documents/UA-101 Reports") && source("app/Report.swift").contains("/Documents/UA-101 Reports"),
                     "the user's own files: the folders the app writes them to")
             t.check(!script.contains("com.apple.MIDI") && !script.contains("ByHost"), "macOS's MIDI settings files: never named, never touched")
+            let unfitted = ["app/Manual.swift", "app/PanelApp.swift", "app/Report.swift", "app/Uninstall.swift", "app/Notes.swift", "app/Messages.swift",
+                            "app/DialogWindows.swift", "app/Backup.swift", "app/DriverSettings.swift"]
+                .flatMap { source($0).components(separatedBy: "\n") }
+                .filter { $0.contains(".runModal()") && !$0.contains("panel.runModal()") }
+            t.check(unfitted.isEmpty, "every alert of the app is fitted to the room above the Dock\(unfitted.isEmpty ? "" : ": " + unfitted.joined(separator: " | "))")
+            // 2026-11-27: what macOS's privacy protection refuses stays, is listed, and doesn't stop the rest.
+            t.check(script.contains("HV_CACHES=\"Library/Group Containers/group.com.apple.helpviewer.content/Library/Caches\"")
+                        && script.contains("HV_NAME=\"$APP_ID.$APP_ID.help\"")
+                        && (NSDictionary(contentsOfFile: (root as NSString).appendingPathComponent("app/Info.plist"))?["CFBundleHelpBookName"] as? String)
+                            == plistID("app/Info.plist").map { $0 + ".help" },
+                    "Help Viewer's copy of the help: in its container, under the app's id and the help book's name")
+            t.check(script.contains("say \"    kept (macOS refused): $1\"") && script.contains("privacy protection didn't let the uninstaller remove them")
+                        && script.contains("remove_in_home \"$home/$d\"") && !script.contains("step rm -rf \"$home/"),
+                    "in the accounts: a refusal is kept and listed, and the script goes on")
 
             // The script itself: refusals and dry runs only.
             func runScript(_ args: [String]) -> (Int32, String) {
@@ -5274,6 +5331,9 @@ func runSelfTest(verbose: Bool) -> Int32 {
                 t.check(status == 0 && out.contains("Dry run (\(words))") && out.hasSuffix("Nothing was changed.\n")
                             && !out.components(separatedBy: "\n").contains { $0.hasPrefix("  sudo") },
                         "dry run, \(words): steps shown, nothing changed")
+                if args.contains("--everything") {
+                    t.check(out.contains("group.com.apple.helpviewer.content"), "dry run, \(words): Help Viewer's copy named, not looked into")
+                }
             }
         }
     }

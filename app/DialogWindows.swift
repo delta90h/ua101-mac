@@ -323,3 +323,69 @@ private struct DialogNaturalSizeKey: PreferenceKey {
         if next.width > 0 { value = next }
     }
 }
+
+/// macOS's alert windows, made to fit too (2026-11-27: the uninstaller's last window, with a long
+/// account, ran below the screen and its button couldn't be reached, even with the Dock hidden).
+/// Words too tall for the room above the Dock go into a box that scrolls, and the alert is kept
+/// inside the room: from below the menu bar to above the Dock at its largest.
+extension NSAlert {
+    /// What the alert needs besides its words: title, icon, margins and buttons, and the room
+    /// left free above and below. Measured on macOS 26 with a generous margin.
+    static let fitAllowance: CGFloat = 240
+    /// The width of the scrolling box.
+    static let fitWidth: CGFloat = 440
+
+    /// Gets the alert ready to fit in `room` (screen points). Call before runModal.
+    func prepareToFit(room: NSRect) {
+        let text = informativeText
+        let budget = max(120, room.height - Self.fitAllowance - (accessoryView?.frame.height ?? 0))
+        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let measured = (text as NSString).boundingRect(with: NSSize(width: 300, height: CGFloat.greatestFiniteMagnitude),
+                                                       options: [.usesLineFragmentOrigin, .usesFontLeading],
+                                                       attributes: [.font: font]).height
+        if measured > budget {
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: Self.fitWidth, height: 10))
+            scroll.hasVerticalScroller = true
+            scroll.borderType = .bezelBorder
+            let view = NSTextView(frame: NSRect(x: 0, y: 0, width: Self.fitWidth - 20, height: 10))
+            view.isEditable = false
+            view.isSelectable = true
+            view.font = font
+            view.string = text
+            view.textContainerInset = NSSize(width: 4, height: 4)
+            view.isVerticallyResizable = true
+            view.autoresizingMask = [.width]
+            view.textContainer?.widthTracksTextView = true
+            view.layoutManager?.ensureLayout(for: view.textContainer!)
+            let used = view.layoutManager?.usedRect(for: view.textContainer!).height ?? budget
+            scroll.documentView = view
+            let height = min(budget, used + 12)
+            scroll.setFrameSize(NSSize(width: Self.fitWidth, height: height))
+            if let old = accessoryView {
+                let stack = NSStackView(views: [scroll, old])
+                stack.orientation = .vertical
+                stack.alignment = .leading
+                stack.spacing = 8
+                stack.setFrameSize(NSSize(width: max(Self.fitWidth, old.frame.width), height: height + 8 + old.frame.height))
+                accessoryView = stack
+            } else {
+                accessoryView = scroll
+            }
+            informativeText = ""
+        }
+        layout()
+    }
+
+    /// runModal, fitted to the room on the main screen.
+    @discardableResult
+    func runModalFitted() -> NSApplication.ModalResponse {
+        let room = DockClearance.room(on: NSScreen.main)
+        prepareToFit(room: room)
+        // Once it shows (the modal loop runs the main queue): kept inside the room.
+        DispatchQueue.main.async { [weak self] in
+            guard let w = self?.window else { return }
+            w.setFrame(DialogWindow.keep(w.frame, in: room), display: true)
+        }
+        return runModal()
+    }
+}

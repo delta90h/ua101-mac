@@ -94,6 +94,6 @@ extension AppCore {
         let a = NSAlert()
         a.messageText = title
         a.informativeText = text
-        a.runModal()
+        a.runModalFitted()
     }
 }
