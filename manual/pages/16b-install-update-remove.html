@@ -12,7 +12,7 @@
   <li>macOS may say a <b>background item</b> was added: that is the driver's helper. Leave it allowed.</li>
   <li>Open <b>UA-101 Control</b> from <b>Applications</b>. With the box on, it says <b>Ready</b>.</li>
 </ol>
-<p><b>Check your download (optional):</b> the release page shows the installer's checksum (SHA-256), a long number. Open <b>Terminal</b> (in Applications → Utilities), type <code>shasum -a 256 ~/Downloads/"UA-101 Driver.pkg"</code> and press Return. The long number it prints must be the same as the one on the release page. If it isn't, don't open the file: download it again from the release page.</p>
+<p><b>Check your download (optional):</b> the release page shows the installer's checksum (SHA-256), a long number. Open <b>Terminal</b> (in Applications → Utilities), type <code>shasum -a 256 ~/Downloads/UA-101*.pkg</code> and press Return. The long number it prints must be the same as the one on the release page. If it isn't, don't open the file: download it again from the release page.</p>
 <p>The installer puts these on the Mac: <b>UA-101 Control</b> in Applications, the sound device and the MIDI device (in the Mac's Library folder), and the helper that talks to the box over USB. The driver is for every account on the Mac.</p>
 
 <h2 id="update">Install a newer version</h2>

@@ -1,35 +1,45 @@
-<!-- title: What's new in 1.1 -->
-<!-- summary: The new look, faders up to +12 dB, double-click for 0 dB, the notes pad, a look inside a memory before a Recall, and new driver defaults. -->
-<h1>What's new in 1.1</h1>
+<!-- title: What's new in 1.1 and 1.1.1 -->
+<!-- summary: 1.1.1: a cleaner uninstall, windows that always fit the screen, Recall Memory's Continue. 1.1: the new look, faders up to +12 dB, double-click for 0 dB, the notes pad, a look inside a memory before a Recall, and new driver defaults. -->
+<h1>What's new in 1.1 and 1.1.1</h1>
 
-<h2 id="look">A new look</h2>
+<h2 id="v111">In 1.1.1</h2>
+<ul>
+  <li><b>Remove Everything removes everything it may.</b> With the tick <b>Keep my backup files and reports</b> off, your two folders go to the Trash, never deleted for good. What macOS doesn't let the uninstaller remove is listed in its last window, which then says how to remove it yourself. See <a href="16b-install-update-remove.html#remove">Remove the driver and the app</a>.</li>
+  <li><b>Windows always fit the screen.</b> Every message window stays between the menu bar and the Dock; a long one scrolls, so its buttons can always be reached.</li>
+  <li><b>Recall Memory:</b> after a Recall, Save or Reset, the box takes the next one only after a few seconds. <b>Continue</b> now comes on by itself when the wait is over (before, it stayed grey until you picked another memory).</li>
+  <li>Each release page shows the installer's checksum, so you can check your download. See <a href="16b-install-update-remove.html#install">Install</a>.</li>
+</ul>
+
+<h2 id="v11">In 1.1</h2>
+
+<h3 id="look">A new look</h3>
 <ul>
   <li>Each part of the mixer has its own metal plate: INPUT MONITOR, OUTPUT MONITOR and MONITOR OUT.</li>
   <li>Faders, knobs and keys look like real ones, in the dark and the light look.</li>
   <li>The <b>ON</b> key is now <b>MUTE</b>. It lights red when the channel is muted, and stays dark while the channel plays. It does the same as before.</li>
 </ul>
 
-<h2 id="above-0">Volume up to +12 dB</h2>
+<h3 id="above-0">Volume up to +12 dB</h3>
 <ul>
   <li>Faders go up to <b>+12 dB</b>, with a stop at <b>0 dB</b>. A fader pushed up from below stops at 0 dB: let go and push again to go higher.</li>
   <li>The ↑ key stops at 0 dB too, also while you hold it. Let go and press again to go higher.</li>
 </ul>
 <div class="note"><b>Careful:</b> above 0 dB a channel plays louder than it comes in. Turn the monitors down before you try it.</div>
 
-<h2 id="double-click">Double-click</h2>
+<h3 id="double-click">Double-click</h3>
 <ul>
   <li>Double-click a fader: back to <b>0 dB</b>, from above or below.</li>
   <li>Double-click a pan knob: back to the middle (<b>C</b>).</li>
 </ul>
 <p>On a linked pair, both channels move. See <a href="03-mixer.html">Use the mixer</a>.</p>
 
-<h2 id="notes">A notes pad</h2>
+<h3 id="notes">A notes pad</h3>
 <p><b>View → Show Notes</b> (⌥⌘N) opens a window for your own notes, for example what is wired to which socket. The notes stay on this Mac. See <a href="14-view-menu.html">Change how the app looks (View menu)</a>.</p>
 
-<h2 id="memory">See a memory before you recall it</h2>
+<h3 id="memory">See a memory before you recall it</h3>
 <p><b>Recall Memory…</b> now lists what the memory you pick would change, before anything changes: each setting that differs, as it is now → as the memory holds it. See <a href="10-recall-memory.html">Bring a memory into use (Recall Memory)</a>.</p>
 
-<h2 id="defaults">New driver defaults: 8 ms and 8 ms</h2>
+<h3 id="defaults">New driver defaults: 8 ms and 8 ms</h3>
 <p>The driver now starts with <b>playback 8 ms</b> and <b>recording 8 ms</b> (before: 21.3 ms and 5 ms). Software instruments answer sooner.</p>
 <ul>
   <li>Playback at 8 ms needs the music app's buffer at <b>128 frames or more</b> (at 48 kHz). With a smaller buffer, choose 10 ms or more in <b>Driver Settings</b>.</li>
