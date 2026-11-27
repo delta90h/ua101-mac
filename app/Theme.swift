@@ -49,6 +49,10 @@ struct Theme {
     /// (the user's choice, 2026-11-27), with dark words on it. The other warnings keep `warn`.
     var solo: Color { Color(red: 250 / 255, green: 158 / 255, blue: 18 / 255) }
     var soloText: Color { Color(red: 0.04, green: 0.06, blue: 0.08) }
+    /// The acid glow of a lit MUTE or SOLO key (the user's choice, 2026-11-27, with less halo than
+    /// first shown): the key burns in its colour made as bright as it goes, white-hot at the middle.
+    var muteGlow: KeyGlow { KeyGlow(light: Color(hex: 0xff0015), hot: Color(hex: 0xff8c98)) }
+    var soloGlow: KeyGlow { KeyGlow(light: Color(hex: 0xffa112), hot: Color(hex: 0xffd594)) }
 
     /// The red light inside an optical socket.
     var optical: Color { scheme == .dark ? Color(red: 1.00, green: 0.24, blue: 0.20) : Color(red: 0.90, green: 0.14, blue: 0.12) }
@@ -250,6 +254,12 @@ struct InsetWell: ViewModifier {
     }
 }
 
+/// A lit key's acid glow: its colour at full brightness, and the white-hot tint of it.
+struct KeyGlow {
+    let light: Color
+    let hot: Color
+}
+
 /// A key: raised with a soft shadow when off; pressed in and glowing in its colour when on.
 /// `flagged` rings it red. In a mixer section it takes that section's colours.
 struct KeyCap: ViewModifier {
@@ -259,6 +269,7 @@ struct KeyCap: ViewModifier {
     let color: Color
     let radius: CGFloat
     var flagged = false
+    var glow: KeyGlow? = nil
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius)
@@ -266,7 +277,19 @@ struct KeyCap: ViewModifier {
         let light = section?.edgeLight ?? theme.edgeLight
         return content
             .background(ZStack {
-                if on {
+                if on, let glow {
+                    // Acid glow: a tight halo of its full colour on the plate around it, a hot rim.
+                    shape.fill(glow.light).shadow(color: glow.light.opacity(0.9), radius: 2).shadow(color: glow.light.opacity(0.45), radius: 5)
+                    // Burning: white-hot a little below the middle.
+                    shape.fill(EllipticalGradient(colors: [glow.hot.opacity(0.32), glow.light.opacity(0)],
+                                                  center: UnitPoint(x: 0.5, y: 0.6), endRadiusFraction: 0.5))
+                    shape.fill(LinearGradient(stops: [
+                        .init(color: Color.black.opacity(0.34), location: 0), .init(color: Color.black.opacity(0), location: 0.45),
+                        .init(color: Color.white.opacity(0), location: 0.6), .init(color: Color.white.opacity(0.22), location: 1),
+                    ], startPoint: .top, endPoint: .bottom))
+                    // A hot rim on its own edge.
+                    shape.strokeBorder(glow.hot.opacity(0.7), lineWidth: 1)
+                } else if on {
                     // Its light on the plate around it.
                     shape.inset(by: -2.5).fill(color.opacity(0.14))
                     shape.inset(by: -1.25).fill(color.opacity(0.22))
@@ -285,7 +308,7 @@ struct KeyCap: ViewModifier {
                 }
             })
             .overlay(shape.strokeBorder(
-                on ? LinearGradient(colors: [Color.black.opacity(0.55), Color.white.opacity(0.40)], startPoint: .top, endPoint: .bottom)
+                on ? LinearGradient(colors: [Color.black.opacity(glow == nil ? 0.55 : 0.33), Color.white.opacity(glow == nil ? 0.40 : 0.24)], startPoint: .top, endPoint: .bottom)
                    : LinearGradient(colors: [light, Color.black.opacity(0.55)], startPoint: .top, endPoint: .bottom),
                 lineWidth: 1))
             // The unit disagreed: a ring just outside the key, so it shows on a lit red key too.
@@ -296,8 +319,8 @@ struct KeyCap: ViewModifier {
 extension View {
     func raised(_ radius: CGFloat = 6) -> some View { modifier(RaisedPlate(radius: radius)) }
     func inset(_ radius: CGFloat = 6, flagged: Bool = false) -> some View { modifier(InsetWell(radius: radius, flagged: flagged)) }
-    func keycap(on: Bool, color: Color, radius: CGFloat = 5, flagged: Bool = false) -> some View {
-        modifier(KeyCap(on: on, color: color, radius: radius, flagged: flagged))
+    func keycap(on: Bool, color: Color, radius: CGFloat = 5, flagged: Bool = false, glow: KeyGlow? = nil) -> some View {
+        modifier(KeyCap(on: on, color: color, radius: radius, flagged: flagged, glow: glow))
     }
 }
 
