@@ -128,6 +128,30 @@ enum Uninstall {
         }
     }
 
+    /// Help Viewer's copy of this app's help (2026-11-27): kept in Help Viewer's own container,
+    /// which macOS's privacy protection refuses the script. With Remove Everything the app moves
+    /// this account's copy to the Trash itself, before the script runs (macOS may ask once whether
+    /// UA-101 Control may see other apps' data; refused, it stays and the script lists it). Only
+    /// the items named after this app and its help book; Help Viewer's copies of other apps' help
+    /// are never touched. Safe: Help Viewer makes a new copy if the app is installed again.
+    enum HelpViewerCopy {
+        static let caches = "Library/Group Containers/group.com.apple.helpviewer.content/Library/Caches"
+        /// The app's bundle id, a dot, and its help book's name, as Help Viewer names its copy.
+        static func prefix(bundle: Bundle = .main) -> String {
+            let id = bundle.bundleIdentifier ?? "local.ua101.control"
+            let book = bundle.object(forInfoDictionaryKey: "CFBundleHelpBookName") as? String ?? "local.ua101.control.help"
+            return id + "." + book
+        }
+        /// Of the names in the folder, this app's own.
+        static func ours(_ names: [String], prefix: String) -> [String] { names.filter { $0.hasPrefix(prefix) }.sorted() }
+        /// This account's copies (empty if there are none, or macOS doesn't let the app look).
+        static func items(home: String = NSHomeDirectory(), prefix: String = prefix(), fm: FileManager = .default) -> [URL] {
+            let dir = home + "/" + caches
+            guard let names = try? fm.contentsOfDirectory(atPath: dir) else { return [] }
+            return ours(names, prefix: prefix).map { URL(fileURLWithPath: dir + "/" + $0) }
+        }
+    }
+
     /// Runs the script (off the main thread: the password window is macOS's own).
     static func run(_ c: Choice, uid: uid_t = getuid()) -> Outcome {
         let p = Process()
@@ -256,7 +280,11 @@ extension AppCore {
         progress.show()
         DispatchQueue.global(qos: .userInitiated).async {
             // The user's own files in this account: to the Trash by the app (see Uninstall.MyFiles).
-            let moved = choice == .everything(keepMyFiles: false) ? Uninstall.MyFiles.moveToTrash(Uninstall.MyFiles.folders()) : []
+            // And Help Viewer's copy of the help, with Remove Everything (see Uninstall.HelpViewerCopy).
+            var toTrash: [URL] = []
+            if choice == .everything(keepMyFiles: false) { toTrash += Uninstall.MyFiles.folders() }
+            if choice.isEverything { toTrash += Uninstall.HelpViewerCopy.items() }
+            let moved = Uninstall.MyFiles.moveToTrash(toTrash)
             let outcome = Uninstall.run(choice)
             var midi: GreyMIDI.Result?
             var notBack: [Uninstall.MyFiles.Moved] = []
@@ -274,11 +302,11 @@ extension AppCore {
         let a = NSAlert()
         switch outcome {
         case .cancelled, .notRun:
-            // Nothing ran: the app goes on as before (the folders it moved are back).
+            // Nothing ran: the app goes on as before (what it moved to the Trash is back).
             uninstalling = false
             AppCore.recordStopped = false
             let trash = Uninstall.MyFiles.stillInTrash(notBack)
-            if !moved.isEmpty { AppCore.record("Uninstall didn't run: the backup and report folders were put back" + (trash.map { ". " + $0 } ?? "")) }
+            if !moved.isEmpty { AppCore.record("Uninstall didn't run: what the app had moved to the Trash was put back" + (trash.map { ". " + $0 } ?? "")) }
             guard case .notRun(let why) = outcome else {
                 guard let trash else { return }
                 a.messageText = "The UA-101 wasn't uninstalled"

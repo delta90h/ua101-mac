@@ -472,12 +472,18 @@ else
         say "These stay: macOS's privacy protection didn't let the uninstaller remove them."
         say "You can move them to the Trash yourself in the Finder:$refused"
     fi
-    if [ "$from_app" = 1 ]; then
-        say "In other accounts, Audio MIDI Setup may still show a grey \"UA-101\". To remove it there:"
-    else
-        say "Audio MIDI Setup may still show a grey \"UA-101\" (in each account). To remove it:"
+    # The other accounts a person uses (the app clears its own account's grey UA-101 itself).
+    others=$(dscl . -list /Users UniqueID | awk -v me="$me" '$2 >= 501 && $2 != me' | wc -l | tr -d ' ')
+    if [ "$from_app" = 0 ] || [ "$others" -gt 0 ]; then
+        if [ "$from_app" = 1 ]; then
+            say "In other accounts, Audio MIDI Setup may still show a grey \"UA-101\". To remove it there:"
+        elif [ "$others" -gt 0 ]; then
+            say "Audio MIDI Setup may still show a grey \"UA-101\" (in each account). To remove it:"
+        else
+            say "Audio MIDI Setup may still show a grey \"UA-101\". To remove it:"
+        fi
+        say "open Audio MIDI Setup, choose Window > Show MIDI Studio, click the UA-101, press Delete."
     fi
-    say "open Audio MIDI Setup, choose Window > Show MIDI Studio, click the UA-101, press Delete."
 fi
 if [ -n "$problems" ]; then
     say "Not everything went as planned:$problems"
