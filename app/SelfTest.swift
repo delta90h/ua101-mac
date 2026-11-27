@@ -5289,10 +5289,36 @@ func runSelfTest(verbose: Bool) -> Int32 {
             let kept = DialogWindow.keep(NSRect(x: 100, y: -300, width: 400, height: 500), in: room)
             t.check(room.contains(kept), "an alert placed partly below the room: moved inside it")
         }
+        // No blue ring on Driver Settings… as the mixer opens (2026-11-27): no button is chosen
+        // for the keyboard as a window opens, once until it closes; not the Notes window.
+        do {
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled], backing: .buffered, defer: true)
+            w.title = "UA-101 Control"
+            let button = NSButton(title: "Driver Settings…", target: nil, action: nil)
+            w.contentView?.addSubview(button)
+            w.makeFirstResponder(button)
+            t.check(w.firstResponder === button, "a button can hold the keyboard (the test's start)")
+            NoFirstFocus.opened(w)
+            t.check(w.firstResponder === w, "the mixer opens with no button chosen")
+            w.makeFirstResponder(button)
+            NoFirstFocus.opened(w)
+            t.check(w.firstResponder === button, "chosen with Tab: stays chosen when the window is key again")
+            t.check(NoFirstFocus.applies(to: w) && DialogWindow.titles.allSatisfy { NoFirstFocus.titles.contains($0) },
+                    "the mixer, Patch Bay and Driver Settings")
+            let notes = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+            notes.title = "UA-101 Notes"
+            let panel = NSPanel(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+            panel.title = "UA-101 Control"
+            t.check(!NoFirstFocus.applies(to: notes) && !NoFirstFocus.applies(to: panel), "not the Notes window, not panels")
+        }
         let here = (#filePath as NSString).deletingLastPathComponent
         let root = (here as NSString).deletingLastPathComponent
         func source(_ path: String) -> String { (try? String(contentsOfFile: (root as NSString).appendingPathComponent(path), encoding: .utf8)) ?? "" }
         let app = source("app/PanelApp.swift"), script = source("install/uninstall.sh")
+        t.check(app.isEmpty || app.contains("func applicationDidFinishLaunching(_ notification: Notification) {\n        let args = CommandLine.arguments\n        NoFirstFocus.start()"),
+                "no button chosen as a window opens: started as the app starts")
+        t.check(source("app/DialogWindows.swift").contains("if let key = NSApp.keyWindow { opened(key) }"),
+                "the mixer, already key when the app has finished starting, opens with no button chosen too")
         t.check(app.isEmpty || app.contains("CommandGroup(after: .appSettings) {\n            Divider()\n            Button(\"\(Uninstall.menuTitle)\") { AppCore.shared.uninstall() }"),
                 "the app menu has \(Uninstall.menuTitle)")
         t.check(app.isEmpty || (app.contains("guard !recordStopped else { return }") && app.contains("if !self.uninstalling { self.popups.arrived(m) }")),

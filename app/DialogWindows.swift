@@ -389,3 +389,54 @@ extension NSAlert {
         return runModal()
     }
 }
+
+/// No button is chosen for the keyboard as a window opens (the owner's wish, 2026-11-27).
+/// With Keyboard navigation on in System Settings, macOS gives the keyboard to a window's
+/// first button as it opens and draws a blue ring around it (Driver Settings… on the mixer's
+/// top line). The mixer, its sheets, Patch Bay and Driver Settings now open with none chosen;
+/// Tab still chooses the first button, and Tab and Space work as before after that. Return and
+/// Escape on a sheet's buttons don't depend on it. Not the Notes window (it is for typing) and
+/// not panels (alerts, Open and Save, Messages).
+enum NoFirstFocus {
+    static let titles: Set<String> = DialogWindow.titles.union(["UA-101 Control"])
+    /// The windows already opened without a chosen button: once each, until it closes, so a
+    /// button chosen with Tab stays chosen when the app comes back to the front.
+    private static let done = NSHashTable<NSWindow>.weakObjects()
+    private static var started = false
+
+    static func applies(to w: NSWindow) -> Bool {
+        if w is NSPanel { return false }
+        if let parent = w.sheetParent { return applies(to: parent) }
+        return titles.contains(w.title)
+    }
+
+    static func start() {
+        guard !started else { return }
+        started = true
+        let centre = NotificationCenter.default
+        centre.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { n in
+            guard let w = n.object as? NSWindow else { return }
+            opened(w)
+        }
+        centre.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { n in
+            guard let w = n.object as? NSWindow else { return }
+            done.remove(w)
+        }
+        // The mixer is already the key window when the app has finished starting.
+        if let key = NSApp.keyWindow { opened(key) }
+    }
+
+    /// The window became key: the first time since it opened, nothing chosen. Once more a
+    /// moment later, as SwiftUI may choose its first button after the window became key.
+    static func opened(_ w: NSWindow) {
+        guard applies(to: w), !done.contains(w) else { return }
+        done.add(w)
+        clear(w)
+        DispatchQueue.main.async { clear(w) }
+    }
+
+    static func clear(_ w: NSWindow) {
+        if w.firstResponder !== w { w.makeFirstResponder(nil) }
+    }
+}
+

@@ -245,6 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
+        NoFirstFocus.start()
         #if !UA101_USER
         // Developer build only: moving pretend levels from the start, to measure what the
         // drawing costs (the 1.1 look, 2026-11-27). The pretend unit; nothing reaches a real one.
