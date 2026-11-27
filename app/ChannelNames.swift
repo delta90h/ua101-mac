@@ -13,11 +13,12 @@ struct StripID: Hashable {
 enum ChannelNames {
     static let groupMonitor = 0, groupInput = 1, groupOutput = 2
 
-    static let groupTitle = ["MONITOR OUT", "INPUT", "OUTPUT"]
+    /// MAIN OUT is the app's name for what the box labels MONITOR OUT (the user's words, 2026-11-27).
+    static let groupTitle = ["MAIN OUT", "INPUT", "OUTPUT"]
     /// A line under the group's title.
     static let groupNote = ["what you hear", "into the monitor mix", "from the computer"]
     /// The name on top of each section of the mixer, in its middle (the user's words, 2026-11-27).
-    static let sectionTitle = ["MONITOR OUT", "INPUT MONITOR", "OUTPUT MONITOR"]
+    static let sectionTitle = ["MAIN OUT", "INPUT MONITOR", "OUTPUT MONITOR"]
 
     /// The short label on a strip.
     static let short: [[String]] = [
@@ -44,7 +45,7 @@ enum ChannelNames {
     static let rateCode192 = 4
 
     /// INPUT 11-12 are not sockets and have no strips of their own: the unit sends
-    /// its monitor mix to the computer as two more inputs, so the MONITOR OUT
+    /// its monitor mix to the computer as two more inputs, so the MAIN OUT
     /// strips carry these words instead of LINE. Not at 192 kHz: no mix is sent.
     private static let recordedAs = ["→ IN 11", "→ IN 12"]
 
@@ -60,8 +61,8 @@ enum ChannelNames {
         switch s.group {
         case groupMonitor:
             return rateCode == rateCode192
-                ? "MONITOR OUT and PHONES. At 192 kHz the monitor mix isn't sent to the computer."
-                : "MONITOR OUT and PHONES. The monitor mix is also sent to the computer: software records it as input \(11 + s.channel)."
+                ? "MAIN OUT: the box's MONITOR OUT and PHONES sockets. At 192 kHz the monitor mix isn't sent to the computer."
+                : "MAIN OUT: the box's MONITOR OUT and PHONES sockets. The monitor mix is also sent to the computer: software records it as input \(11 + s.channel)."
         case groupInput:
             switch socket[s.group][s.channel] {
             case .combo: return "INPUT \(s.channel + 1): a mic preamp, the combo socket (XLR and 1/4-inch) on the front. Its SENS knob and switches are on the unit."
@@ -110,7 +111,7 @@ enum ChannelNames {
         var tag = ""
     }
     static let sources: [Source] = [
-        Source(value: 1, short: "MON", long: "MONITOR OUT"),
+        Source(value: 1, short: "MAIN", long: "MAIN OUT"),
         Source(value: 2, short: "1-2", long: "INPUT 1-2", socket: .combo, tag: "MIC PRE"),
         Source(value: 3, short: "3-4", long: "INPUT 3-4", socket: .jack),
         Source(value: 4, short: "5-6", long: "INPUT 5-6", socket: .jack),
