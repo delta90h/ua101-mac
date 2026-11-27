@@ -2264,8 +2264,8 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(track.value(travel: -1, full: 176, range: 1).map { abs($0 - (0.5 - 1.0 / 176)) < 1e-12 } == true, "a point of travel is a 176th of the fader's way")
         t.check(track.value(travel: 0, full: 176, range: 1) == 0.5, "back where it was pressed, after a move: the start value is asked for again")
         t.check(track.value(travel: 500, full: 176, range: 1) == 1 && track.value(travel: -500, full: 176, range: 1) == 0, "held at the ends")
-        let dBperPoint = (FaderScale.topDB - FaderScale.bottomDB) / ((1 - FaderScale.offZone) * Double(Metrics.faderHeight - FaderCap.height))
-        t.check(abs(dBperPoint - 0.426) < 0.001, "a point of mouse travel on a fader is \(String(format: "%.3f", dBperPoint)) dB: the steps seen on the unit, 2026-11-12")
+        let dBperPoint = FaderScale.dBPerPoint(at: -3, travel: Double(Metrics.faderHeight - FaderCap.height))
+        t.check(abs(dBperPoint - 6.0 / 22) < 0.001, "around 0 dB a point of mouse travel on a fader is \(String(format: "%.3f", dBperPoint)) dB: 6 dB in 22 points (the scale of 2026-11-27)")
 
         // The window, off screen, with real mouse events.
         let app = NSApplication.shared

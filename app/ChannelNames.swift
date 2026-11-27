@@ -16,6 +16,8 @@ enum ChannelNames {
     static let groupTitle = ["MONITOR OUT", "INPUT", "OUTPUT"]
     /// A line under the group's title.
     static let groupNote = ["what you hear", "into the monitor mix", "from the computer"]
+    /// The name on top of each section of the mixer, in its middle (the user's words, 2026-11-27).
+    static let sectionTitle = ["MONITOR OUT", "Input Monitor", "Output Monitor"]
 
     /// The short label on a strip.
     static let short: [[String]] = [
@@ -170,10 +172,18 @@ enum Format {
     }
 }
 
-/// The fader's scale: the bottom is off, then −60 dB to +12 dB in equal steps.
+/// The fader's scale, as on a mixing desk (the user's picture, 2026-11-27): the bottom is off,
+/// then −60 dB to +12 dB along a bent line. From −12 dB up every 6 dB is the same length, and
+/// 0 dB sits a quarter of the way down; below −12 dB the steps get closer, so the fine part
+/// is where the music is. Between two points of the table the line is straight.
 enum FaderScale {
     static let bottomDB = -60.0, topDB = 12.0
     static let offZone = 0.04
+    /// (dB, position from 0 at the bottom to 1 at the top), from the bottom up.
+    static let points: [(dB: Double, pos: Double)] = [
+        (-60, offZone), (-40, 0.11), (-30, 0.22), (-20, 0.36), (-12, 0.5),
+        (-6, 0.625), (0, 0.75), (6, 0.875), (12, 1),
+    ]
 
     static func position(volume: UInt32) -> Double {
         if volume == 0 { return 0 }
@@ -182,14 +192,27 @@ enum FaderScale {
     }
 
     static func position(dB d: Double) -> Double {
-        let p = offZone + (1 - offZone) * (d - bottomDB) / (topDB - bottomDB)
-        return min(1, max(offZone, p))
+        if d <= bottomDB { return offZone }
+        if d >= topDB { return 1 }
+        let i = points.lastIndex(where: { $0.dB <= d })!
+        let a = points[i], b = points[i + 1]
+        return a.pos + (b.pos - a.pos) * (d - a.dB) / (b.dB - a.dB)
     }
 
     static func volume(position p: Double) -> UInt32 {
         if p < offZone { return 0 }
-        let d = bottomDB + (min(1, p) - offZone) / (1 - offZone) * (topDB - bottomDB)
-        return volume(dB: d)
+        let q = min(1, p)
+        let i = points.lastIndex(where: { $0.pos <= q })!
+        if i == points.count - 1 { return volume(dB: topDB) }
+        let a = points[i], b = points[i + 1]
+        return volume(dB: a.dB + (b.dB - a.dB) * (q - a.pos) / (b.pos - a.pos))
+    }
+
+    /// How many dB one point of fader travel is at a level: the line's slope there.
+    static func dBPerPoint(at d: Double, travel: Double) -> Double {
+        let i = min(points.count - 2, points.lastIndex(where: { $0.dB <= d }) ?? 0)
+        let a = points[i], b = points[i + 1]
+        return (b.dB - a.dB) / ((b.pos - a.pos) * travel)
     }
 
     static func volume(dB d: Double) -> UInt32 {

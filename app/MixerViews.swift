@@ -366,7 +366,7 @@ struct Fader: View {
     private static let slotWidth: CGFloat = 6
     private static let slotCentre: CGFloat = 29 // from the strip's left edge; the scale is left of it, the meter right
     private static let marks: [(dB: Double, label: String)] = [
-        (12, "12"), (0, "0"), (-12, "12"), (-24, "24"), (-36, "36"), (-48, "48"), (-60, "60"),
+        (12, "12"), (6, "6"), (0, "0"), (-6, "6"), (-12, "12"), (-20, "20"), (-30, "30"), (-40, "40"),
     ]
 
     var body: some View {
@@ -388,6 +388,12 @@ struct Fader: View {
                 }
                 .offset(x: 1, y: y - 4.5)
             }
+            // Off, at the very bottom.
+            HStack(spacing: 2) {
+                Text("∞").font(.readout(8)).foregroundColor(sec.dim).frame(width: 11, alignment: .trailing)
+                Rectangle().fill(sec.tick).frame(width: 3, height: 1)
+            }
+            .offset(x: 1, y: travel + half - 5)
             Group {
                 // The slot, cut into the panel: a lit lip around it, dark inside, deepest at
                 // its left wall.
@@ -648,12 +654,9 @@ struct GroupView: View {
         let pairs = model.snap.channels[group].count / 2
         let sec = theme.section(group)
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(ChannelNames.groupTitle[group]).font(.panel(11, .bold)).tracking(1.2).foregroundColor(sec.text).copyable()
-                if pairs > 1 {
-                    Text(ChannelNames.groupNote[group]).font(.panel(11)).foregroundColor(sec.dim).copyable()
-                }
-            }
+            Text(ChannelNames.sectionTitle[group]).font(.panel(11, .bold)).tracking(1.2).foregroundColor(sec.text)
+                .lineLimit(1).frame(maxWidth: .infinity, alignment: .center).copyable()
+                .help(ChannelNames.groupTitle[group] + ": " + ChannelNames.groupNote[group])
             HStack(spacing: 7) {
                 ForEach(0..<pairs, id: \.self) { p in PairView(model: model, group: group, pair: p) }
             }
@@ -955,7 +958,7 @@ struct MixerWindowView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text("UA-101").font(.panel(17, .heavy)).tracking(1).foregroundColor(theme.text).copyable()
-                Text("Direct monitor mixer").font(.panel(13)).foregroundColor(theme.dim).lineLimit(1).copyable()
+                Text("Monitor mixer").font(.panel(13)).foregroundColor(theme.dim).lineLimit(1).copyable()
                 if byThemselves {
                     // The end-user app: nothing while all is well.
                     if s.state == .ready && !s.writesAllowed {

@@ -11,7 +11,7 @@ A driver and control app for the **Edirol / Roland UA-101** USB audio interface 
 - **Sound in every app.** The UA-101 shows in System Settings → Sound, Logic Pro and every other music app: up to 12 inputs (the monitor mix included) and 10 outputs, at 44.1, 48, 88.2, 96 and 192 kHz (6 each way at 192 kHz). The channels carry the names of the sockets (INPUT 1-8, OPTICAL IN, MONITOR OUT; OUTPUT 1-8, OPTICAL OUT).
 - **MIDI.** A keyboard on the box's MIDI IN and MIDI OUT shows in every MIDI app as **UA-101 MIDI**, and in Audio MIDI Setup with the box's picture.
 - **UA-101 Control**, the control panel:
-  - the direct monitor mixer: on, solo, pan, volume and stereo link for every channel, with meters;
+  - the direct monitor mixer: mute, solo, pan, volume and stereo link for every channel, with meters;
   - the patch bay: what each pair of OUTPUT sockets plays;
   - the box's five memories: recall, save, reset to factory;
   - backups of the settings as files on your Mac, made by themselves before every bigger change;
