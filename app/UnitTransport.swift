@@ -177,7 +177,7 @@ struct Allowed: Equatable {
         if let p = patchWords { parts.append(p + " (Patch Bay window)") }
         if !volumes.isEmpty { parts.append("the volume of \(volumeNames) (up to 0 dB)") }
         if !pans.isEmpty { parts.append("the pan of \(panNames)") }
-        if !ons.isEmpty { parts.append("the on/off of \(onNames)") }
+        if !ons.isEmpty { parts.append("the mute of \(onNames)") }
         if !links.isEmpty { parts.append("the stereo link of \(linkNames)") }
         if !solos.isEmpty { parts.append("the solo of \(soloNames)") }
         if parts.count < 3 { return parts.isEmpty ? "nothing" : parts.joined(separator: " and ") }
@@ -200,13 +200,13 @@ struct Allowed: Equatable {
         }
         let samePans = !pans.isEmpty && pans == volumes.intersection(Self.panStrips)
         let together = samePans && volumes == ons
-        if together { parts.append(Self.shortNames(volumes) + " volume, pan, on/off") }
+        if together { parts.append(Self.shortNames(volumes) + " volume, pan, mute") }
         else if samePans { parts.append(Self.shortNames(volumes) + " volume and pan") }
         else {
             if !volumes.isEmpty { parts.append(Self.shortNames(volumes) + " volume") }
             if !pans.isEmpty { parts.append(Self.shortNames(pans) + " pan") }
         }
-        if !ons.isEmpty, !together { parts.append(Self.shortNames(ons) + " on/off") }
+        if !ons.isEmpty, !together { parts.append(Self.shortNames(ons) + " mute") }
         if !links.isEmpty { parts.append((links.count == Self.allPairs ? "" : linkNames + " ") + "link") }
         if !solos.isEmpty { parts.append((solos == [1, 2] ? "" : soloNames + " ") + "solo") }
         return parts.isEmpty ? "nothing" : parts.joined(separator: " · ")

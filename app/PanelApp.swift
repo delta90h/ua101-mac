@@ -233,6 +233,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
+        #if !UA101_USER
+        // Developer build only: moving pretend levels from the start, to measure what the
+        // drawing costs (the 1.1 look, 2026-11-27). The pretend unit; nothing reaches a real one.
+        if args.contains("--pretend-levels") {
+            AppCore.shared.ui.pretendLevels = true
+            AppCore.shared.model.meters.setDemo(true)
+        }
+        #endif
         // For the build's own check: start, count the windows, leave. Stays in the background.
         if let i = args.firstIndex(of: "--quit-after"), i + 1 < args.count, let seconds = Double(args[i + 1]) {
             NSApp.setActivationPolicy(.accessory)
@@ -526,7 +534,7 @@ struct RootView: View {
     @ObservedObject var ui: PanelUI
 
     /// Reset Mixer's confirmation: what is overwritten, that it can't be undone, what is saved first.
-    static let resetMixerWarning = "Every on/off, pan, volume, link and solo in use now is overwritten with the way the unit was delivered: every channel on, at 0 dB. "
+    static let resetMixerWarning = "Every mute, pan, volume, link and solo in use now is overwritten with the way the unit was delivered: no channel muted, every one at 0 dB. "
         + MemoryCommand.cantBeUndone
         + " A backup of the settings in use now is saved first, by itself (Documents, UA-101 Backups); to go back: Device menu, Open Backup. Turn the monitors down and take headphones off first: what you hear can jump. The patch bay and the unit's memories don't change."
 
@@ -745,9 +753,9 @@ struct PanelCommands: Commands {
             // The on/off bit itself, one message each. Bit 1 means "off" (heard on INPUT 1,
             // 2026-11-14). The unit holds 0 on every channel as delivered, so "bit 1" mutes
             // the channel and "bit 0" goes back.
-            Menu("\(name) On/Off, One Exact Bit") {
-                Button("Bit 1  (off: mutes it)") { model.setOnBitExact(selected, 1) }
-                Button("Bit 0  (on, as delivered)") { model.setOnBitExact(selected, 0) }
+            Menu("\(name) Mute, One Exact Bit") {
+                Button("Bit 1  (mute on)") { model.setOnBitExact(selected, 1) }
+                Button("Bit 0  (mute off, as delivered)") { model.setOnBitExact(selected, 0) }
             }
             .disabled(!model.snap.writesAllowed)
             #endif
@@ -773,7 +781,7 @@ struct PanelCommands: Commands {
                     Button(ChannelNames.full(id)) { model.cursor = id }
                 }
             }
-            Menu("Monitor") {
+            Menu("Mute") {
                 Button("Selected Channel") { model.handle(.toggleMonitor) }.keyboardShortcut("m", modifiers: [])
                 Divider()
                 ForEach(ChannelNames.screenOrder.filter { $0.group != ChannelNames.groupMonitor }, id: \.self) { id in

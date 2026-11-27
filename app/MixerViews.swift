@@ -226,10 +226,12 @@ struct SocketGlyph: View {
     }
 }
 
-/// A turning knob drawn like a real one: a dark body with a metal rim, a white
-/// pointer, and a thin arc of light from the middle to where it points.
+/// A turning knob drawn like a real one: a dark rounded body in a metal rim, lit from above,
+/// with a soft shadow on the panel, a white pointer, and a thin arc of light from the middle
+/// to where it points.
 struct KnobFace: View {
     @Environment(\.theme) private var theme
+    @Environment(\.section) private var section
     /// -1 hard left, 0 middle, 1 hard right.
     let turn: Double
     var flagged = false
@@ -238,18 +240,27 @@ struct KnobFace: View {
     var body: some View {
         let t = 0.375 + turn * 0.375 // along a 270 degree sweep that starts bottom-left
         let body = size - 9
+        let arc = section?.arc ?? theme.glow
         ZStack {
             Circle().trim(from: 0, to: 0.75)
                 .stroke(theme.track, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(135))
             Circle().trim(from: min(0.375, t), to: max(0.375, t))
-                .stroke(flagged ? theme.bad : theme.glow, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(flagged ? theme.bad : arc, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(135))
+            SoftShadow(shape: Circle(), depth: 2.5, opacity: 0.55, steps: 3).frame(width: body, height: body)
+            // The rim: bright metal, lit at the top.
             Circle().fill(LinearGradient(colors: [theme.capTop, theme.capBottom], startPoint: .top, endPoint: .bottom))
                 .frame(width: body, height: body)
-            Circle().fill(LinearGradient(colors: [theme.knobTop, theme.knobBottom], startPoint: .top, endPoint: .bottom))
+            // The body, rounded: lit at its upper left.
+            Circle().fill(RadialGradient(colors: [Color(hex: 0x4c535d), Color(hex: 0x16191e), Color(hex: 0x0a0b0d)],
+                                         center: UnitPoint(x: 0.38, y: 0.30), startRadius: 0, endRadius: body * 0.62))
                 .frame(width: body - 3, height: body - 3)
-            Capsule().fill(theme.glow).frame(width: 2, height: body / 2 - 4)
+            // Its edge: light along the top, dark along the bottom.
+            Circle().strokeBorder(LinearGradient(colors: [Color.white.opacity(0.45), Color.black.opacity(0.6)],
+                                                 startPoint: .top, endPoint: .bottom), lineWidth: 0.75)
+                .frame(width: body - 3, height: body - 3)
+            Capsule().fill(Color.white).frame(width: 2, height: body / 2 - 4)
                 .offset(y: -(body / 4) - 0.5)
                 .rotationEffect(.degrees(turn * 135))
         }
@@ -295,28 +306,48 @@ struct PanKnob: View {
     }
 }
 
-/// The fader's cap: brushed metal with grip lines and a bright line across the middle.
+/// The fader's cap, in its section's material: ridges for the finger, a highlight on the top
+/// face, a line across the middle, and a soft shadow on the panel below it.
 struct FaderCap: View {
     @Environment(\.theme) private var theme
+    @Environment(\.section) private var section
     let flagged: Bool
     static let width: CGFloat = 20, height: CGFloat = 24
 
     var body: some View {
+        let cap = (section ?? theme.section(ChannelNames.groupOutput)).cap
+        let shape = RoundedRectangle(cornerRadius: 3.5)
         ZStack {
-            // Its skirt: a solid darker shape just below. Every part of the cap is
-            // opaque, so nothing behind it (the slot, its light, the scale) shows through.
-            RoundedRectangle(cornerRadius: 4).fill(theme.capShade).offset(y: 2.5)
-            RoundedRectangle(cornerRadius: 4).fill(LinearGradient(stops: [
-                .init(color: theme.capTop, location: 0), .init(color: theme.capBottom, location: 0.46),
-                .init(color: theme.capTop, location: 0.54), .init(color: theme.capBottom, location: 1),
+            // Every part of the cap is opaque, so nothing behind it (the slot, its light, the
+            // scale) shows through; only its shadow lies beyond it.
+            SoftShadow(shape: shape, depth: 3.5, opacity: 0.6, steps: 4)
+            shape.fill(LinearGradient(colors: [cap.top, cap.bottom], startPoint: .top, endPoint: .bottom))
+            // The top face catches the light; the lower half curves away from it.
+            shape.fill(LinearGradient(stops: [
+                .init(color: cap.shine, location: 0), .init(color: cap.shine.opacity(0), location: 0.42),
+                .init(color: Color.white.opacity(0), location: 0.58), .init(color: cap.shine.opacity(0.35), location: 0.62),
+                .init(color: Color.white.opacity(0), location: 0.9),
             ], startPoint: .top, endPoint: .bottom))
-            VStack(spacing: 2.5) {
-                ForEach(0..<5, id: \.self) { i in
-                    Rectangle().fill(i == 2 ? theme.capMark : theme.capGroove)
-                        .frame(width: i == 2 ? Self.width - 2 : Self.width - 8, height: i == 2 ? 1.5 : 1)
+            // The ridges: each a dark groove with a lit lip under it.
+            VStack(spacing: 0) {
+                ForEach(0..<7, id: \.self) { i in
+                    if i == 3 {
+                        Rectangle().fill(cap.mark).frame(width: Self.width - 2, height: 1.5)
+                            .padding(.vertical, 0.75)
+                    } else {
+                        VStack(spacing: 0) {
+                            Rectangle().fill(cap.ridgeDark).frame(height: 1)
+                            Rectangle().fill(cap.ridgeLight).frame(height: 0.75)
+                        }
+                        .frame(width: Self.width - 6)
+                        .padding(.vertical, 0.6)
+                    }
                 }
             }
-            RoundedRectangle(cornerRadius: 4).strokeBorder(flagged ? theme.bad : theme.capEdge, lineWidth: flagged ? 2 : 0.75)
+            shape.strokeBorder(flagged ? AnyShapeStyle(theme.bad)
+                               : AnyShapeStyle(LinearGradient(colors: [Color.white.opacity(0.55), cap.edge],
+                                                              startPoint: .top, endPoint: .bottom)),
+                               lineWidth: flagged ? 2 : 0.75)
         }
         .frame(width: Self.width, height: Self.height)
     }
@@ -324,6 +355,7 @@ struct FaderCap: View {
 
 struct Fader: View {
     @Environment(\.theme) private var theme
+    @Environment(\.section) private var section
     @ObservedObject var model: PanelModel
     let id: StripID
     let volume: UInt32
@@ -343,23 +375,28 @@ struct Fader: View {
         let travel = h - FaderCap.height
         let pos = FaderScale.position(volume: volume)
         let ceilingPos = FaderScale.position(volume: ceiling)
+        let sec = section ?? theme.section(id.group)
         ZStack(alignment: .topLeading) {
             // The scale.
             ForEach(Self.marks, id: \.dB) { mark in
                 let y = CGFloat(1 - FaderScale.position(dB: mark.dB)) * travel + half
                 HStack(spacing: 2) {
-                    Text(mark.label).font(.readout(7)).foregroundColor(mark.dB == 0 ? theme.text : theme.dim)
+                    Text(mark.label).font(.readout(7)).foregroundColor(mark.dB == 0 ? sec.text : sec.dim)
                         .frame(width: 11, alignment: .trailing)
-                    Rectangle().fill(mark.dB == 0 ? theme.glow.opacity(0.8) : theme.line)
+                    Rectangle().fill(mark.dB == 0 ? sec.text.opacity(0.85) : sec.tick)
                         .frame(width: mark.dB == 0 ? 6 : 3, height: 1)
                 }
                 .offset(x: 1, y: y - 4.5)
             }
             Group {
-                // The slot, sunk into the strip.
-                Capsule().fill(theme.track).frame(width: Self.slotWidth, height: travel + 6)
-                    .overlay(Capsule().strokeBorder(
-                        LinearGradient(colors: [theme.edgeDark, theme.edgeLight], startPoint: .top, endPoint: .bottom), lineWidth: 0.75))
+                // The slot, cut into the panel: a lit lip around it, dark inside, deepest at
+                // its left wall.
+                Capsule().fill(sec.edgeLight.opacity(0.8)).frame(width: Self.slotWidth + 1.5, height: travel + 7.5)
+                    .offset(x: -0.75, y: half - 3)
+                Capsule().fill(LinearGradient(colors: [Color.black, theme.track, Color(white: 0.16)],
+                                              startPoint: .leading, endPoint: .trailing))
+                    .frame(width: Self.slotWidth, height: travel + 6)
+                    .overlay(Capsule().strokeBorder(Color.black.opacity(0.8), lineWidth: 0.75))
                     .offset(y: half - 3)
                 // The part above the ceiling: there, but held for now.
                 if ceilingPos < 1 {
@@ -413,6 +450,7 @@ struct StripView: View {
     let id: StripID
 
     var body: some View {
+        let sec = theme.section(id.group)
         let ch = model.snap.channels[id.group][id.channel]
         let d = model.disagreement
         let hasPan = id.group != ChannelNames.groupMonitor
@@ -423,12 +461,12 @@ struct StripView: View {
                 SocketGlyph(kind: ChannelNames.socket[id.group][id.channel], shines: id.group != ChannelNames.groupInput, size: 22)
                 Text(ChannelNames.tag(id, rateCode: Int(model.snap.rateCode)))
                     .font(.panel(7, .bold)).tracking(0.3).lineLimit(1).fixedSize()
-                    .foregroundColor(ChannelNames.tagStandsOut(id) ? theme.text.opacity(0.85) : theme.dim.opacity(0.7))
+                    .foregroundColor(ChannelNames.tagStandsOut(id) ? sec.text.opacity(0.85) : sec.dim.opacity(0.8))
                     .frame(height: 9).copyable()
             }
             .help(ChannelNames.about(id, rateCode: Int(model.snap.rateCode)))
             Text(ChannelNames.short[id.group][id.channel])
-                .font(.panel(13, .bold)).foregroundColor(theme.text).copyable()
+                .font(.panel(13, .bold)).foregroundColor(sec.text).copyable()
                 .background(GeometryReader { g in
                     Color.clear.preference(key: NameFramesKey.self, value: [id: g.frame(in: .named(MixerWindowView.space))])
                 })
@@ -436,14 +474,19 @@ struct StripView: View {
                 model.cursor = id
                 model.toggleMonitor(id)
             }) {
-                Text("ON").font(.panel(10, .bold))
-                    .foregroundColor(ch.on ? theme.onText : theme.dim)
+                // MUTE (1.1, the user's wish of 2026-11-27, in place of ON): lit red while the
+                // channel is muted, dark while it plays. The same bit as before; only the word and
+                // which way the key lights are turned round.
+                Text("MUTE").font(.panel(9.5, .bold))
+                    .foregroundColor(ch.on ? sec.keyText : Color.white)
                     .frame(width: 38, height: 20)
-                    .keycap(on: ch.on, color: theme.on, radius: 10,
+                    .keycap(on: !ch.on, color: theme.mute, radius: 10,
                             flagged: d?.touches(id, kind: Int32(PANEL_F_ON)) == true)
             }
             .buttonStyle(.plain)
-            .help("Monitor on or off. On the UA-101 this is one bit; bit 1 mutes and bit 0 lets the sound through (heard on INPUT 1, 2026-11-14)")
+            .help(ch.on ? "Mute: click to mute this channel in the monitor mix" : "Muted: click to let this channel into the monitor mix again")
+            .accessibilityLabel("Mute \(ChannelNames.full(id))")
+            .accessibilityAddTraits(ch.on ? [] : .isSelected)
             // SOLO: one channel of the group at a time (MONITOR OUT has none). The lamp is lit
             // for the soloed channel and, in a linked pair, for its partner, as Roland's panel
             // lights it.
@@ -453,7 +496,7 @@ struct StripView: View {
                 model.toggleSolo(id)
             }) {
                 Text("SOLO").font(.panel(8, .bold))
-                    .foregroundColor(soloed ? theme.onText : theme.dim)
+                    .foregroundColor(soloed ? theme.onText : sec.keyText)
                     .frame(width: 38, height: 15)
                     .keycap(on: soloed, color: theme.warn, radius: 7.5,
                             flagged: d.map { Int32($0.kind) == Int32(PANEL_F_SOLO) && $0.group == id.group } ?? false)
@@ -466,7 +509,7 @@ struct StripView: View {
                 VStack(spacing: 1) {
                     PanKnob(model: model, id: id, pan: ch.pan,
                             flagged: d?.touches(id, kind: Int32(PANEL_F_PAN)) == true)
-                    Text(Format.pan(ch.pan)).font(.readout(9)).foregroundColor(theme.dim).copyable()
+                    Text(Format.pan(ch.pan)).font(.readout(9)).foregroundColor(sec.dim).copyable()
                 }
                 .padding(.top, 2)
             } else {
@@ -483,7 +526,7 @@ struct StripView: View {
         }
         .padding(.vertical, 8)
         .frame(width: Metrics.stripWidth)
-        .inset(8)
+        .engravedLane(sec, radius: 8)
         .compositingGroup()
         .opacity(ch.exists ? 1 : 0.28)
         .allowsHitTesting(ch.exists)
@@ -551,6 +594,7 @@ struct PairView: View {
     let pair: Int
 
     var body: some View {
+        let sec = theme.section(group)
         let linked = model.snap.links[group][pair]
         let exists = model.snap.channels[group][pair * 2].exists
         let flagged = model.disagreement.map { Int32($0.kind) == Int32(PANEL_F_LINK) && $0.group == group && $0.index == pair } ?? false
@@ -567,7 +611,7 @@ struct PairView: View {
                         // strip it sits under. A click on it chooses that strip (a design choice,
                         // 2026-11-18): lit when chosen, dim when not. It sends nothing to the unit.
                         Button(action: { model.cursor = id }) {
-                            Capsule().fill(chosen ? theme.cursor : theme.lampOff)
+                            Capsule().fill(chosen ? (sec.text.isDarkish ? theme.link : theme.cursor) : sec.tick)
                                 .frame(width: Metrics.stripWidth - 12, height: 3)
                                 .padding(.vertical, 4)
                                 .frame(width: Metrics.stripWidth)
@@ -583,14 +627,14 @@ struct PairView: View {
             }
             Button(action: { model.toggleLink(group: group, pair: pair) }) {
                 Text("LINK").font(.panel(9, .bold))
-                    .foregroundColor(linked ? theme.onText : theme.dim)
+                    .foregroundColor(linked ? theme.onText : sec.keyText)
                     .frame(width: Metrics.stripWidth * 2 + Metrics.stripGap, height: 19)
                     .keycap(on: linked, color: theme.link, radius: 9.5, flagged: flagged)
             }
             .buttonStyle(.plain)
             .opacity(exists ? 1 : 0.28)
             .allowsHitTesting(exists)
-            .help("Link the pair: on/off and volume move together from the next change on. Linking by itself changes neither channel")
+            .help("Link the pair: mute and volume move together from the next change on. Linking by itself changes neither channel")
         }
     }
 }
@@ -602,11 +646,12 @@ struct GroupView: View {
 
     var body: some View {
         let pairs = model.snap.channels[group].count / 2
+        let sec = theme.section(group)
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(ChannelNames.groupTitle[group]).font(.panel(11, .bold)).tracking(1.2).foregroundColor(theme.text).copyable()
+                Text(ChannelNames.groupTitle[group]).font(.panel(11, .bold)).tracking(1.2).foregroundColor(sec.text).copyable()
                 if pairs > 1 {
-                    Text(ChannelNames.groupNote[group]).font(.panel(11)).foregroundColor(theme.dim).copyable()
+                    Text(ChannelNames.groupNote[group]).font(.panel(11)).foregroundColor(sec.dim).copyable()
                 }
             }
             HStack(spacing: 7) {
@@ -614,7 +659,8 @@ struct GroupView: View {
             }
         }
         .padding(10)
-        .raised(14)
+        .metalPlate(sec, radius: 14)
+        .environment(\.section, sec)
     }
 }
 
@@ -653,8 +699,12 @@ struct HardSwitch: View {
             let shape = RoundedRectangle(cornerRadius: 4)
             let down = known && on
             Color.clear.frame(width: 30, height: 17)
-                .background(shape.fill(LinearGradient(colors: down ? [hw.knobBottom, hw.knobTop] : [hw.knobTop, hw.knobBottom],
-                                                      startPoint: .top, endPoint: .bottom)))
+                .background(ZStack {
+                    if !down { SoftShadow(shape: shape, depth: 2.5, opacity: 0.55, steps: 3) }
+                    shape.fill(LinearGradient(colors: down ? [Color.black.opacity(0.6), hw.knobBottom, hw.knobTop]
+                                                           : [Color(hex: 0x3d4652), hw.knobTop, hw.knobBottom],
+                                              startPoint: .top, endPoint: .bottom))
+                })
                 .overlay(shape.strokeBorder(LinearGradient(colors: down ? [hw.edgeDark, hw.edgeLight] : [hw.edgeLight, hw.edgeDark],
                                                            startPoint: .top, endPoint: .bottom), lineWidth: 1))
             Text(label).font(.panel(8, .bold)).tracking(0.6).foregroundColor(known && on ? theme.text : theme.dim)
@@ -687,8 +737,13 @@ struct RateSelector: View {
             // the unit (the user, 2026-11-14). The marks and figures around it follow the look.
             let hw = Theme.dark
             ZStack {
+                SoftShadow(shape: Circle(), depth: 3, opacity: 0.6, steps: 4)
                 Circle().fill(LinearGradient(colors: [hw.capTop, hw.capBottom], startPoint: .top, endPoint: .bottom))
-                Circle().fill(LinearGradient(colors: [hw.knobTop, hw.knobBottom], startPoint: .top, endPoint: .bottom))
+                Circle().fill(RadialGradient(colors: [Color(hex: 0x4c535d), Color(hex: 0x16191e), Color(hex: 0x0a0b0d)],
+                                             center: UnitPoint(x: 0.38, y: 0.30), startRadius: 0, endRadius: 22))
+                    .padding(2)
+                Circle().strokeBorder(LinearGradient(colors: [Color.white.opacity(0.45), Color.black.opacity(0.6)],
+                                                     startPoint: .top, endPoint: .bottom), lineWidth: 0.75)
                     .padding(2)
                 if let code = code, code >= 0, code < 5 {
                     Capsule().fill(hw.glow).frame(width: 2.5, height: 11).offset(y: -8.5)
@@ -825,7 +880,7 @@ struct DevicePanelView: View {
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
-        .raised(14)
+        .metalPlate(theme.bar, radius: 14)
     }
 }
 

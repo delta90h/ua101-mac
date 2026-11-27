@@ -1640,7 +1640,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(v11.ons == [in1] && v11.on(in1) && !v11.on(strip(inp, 1)) && !v11.on(strip(out, 0)) && !v11.on(strip(mon, 0))
                     && v11.volumes == [in1] && v11.pans == [in1] && !v11.mixer,
                 "version 11's answer: as version 9's, and INPUT 1's on/off")
-        t.check(v11.words.hasSuffix("the pan of INPUT 1 and the on/off of INPUT 1") && v11.short.contains("INPUT 1 volume, pan, on/off"),
+        t.check(v11.words.hasSuffix("the pan of INPUT 1 and the mute of INPUT 1") && v11.short.contains("INPUT 1 volume, pan, mute"),
                 "in words: \(v11.words) / \(v11.short)")
         t.check(Allowed(passes: FakeHelper.version9, passesOn: FakeHelper.version11On).ons.isEmpty
                     && Allowed(passes: UInt64(PANEL_PASS_ON), passesOn: 0).ons.isEmpty && Allowed(passes: FakeHelper.version11).ons.isEmpty,
@@ -1655,7 +1655,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         g.chooseReal()
         g.model.allowChanges(true)
         g.settle()
-        t.check(g.model.allowed == v11 && lines.contains { $0.contains("Changes switched on") && $0.contains("the on/off of INPUT 1") },
+        t.check(g.model.allowed == v11 && lines.contains { $0.contains("Changes switched on") && $0.contains("the mute of INPUT 1") },
                 "changes on; the model's list is the helper's, and the record says so")
         let reads = g.fake.passedOn
         t.check(g.model.snap.channels[inp][0].on && unitValue(g, Int32(PANEL_F_ON), inp, 0, real: true) == 0,
@@ -1663,7 +1663,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
 
         // The first on/off write: one exact bit, once.
         t.equal(g.model.setOnBitExact(in1, 1), Int32(PANEL_OK), "INPUT 1's on/off to exactly the bit 1")
-        t.check(g.model.onNote?.contains("INPUT 1 on/off to bit 1 (off) asked for") == true,
+        t.check(g.model.onNote?.contains("INPUT 1 bit 1 (mute on) asked for") == true,
                 "the note says what was asked for, with the bit beside the word: \(g.model.onNote ?? "nil")")
         g.settle()
         t.check(g.fake.changes.map(PanelModel.hex) == [one] && g.fake.passedOn == reads + 2,
@@ -1679,7 +1679,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(g.fake.changes.map(PanelModel.hex) == [one, zero] && g.fake.passedOn == reads + 4 && unitValue(g, Int32(PANEL_F_ON), inp, 0, real: true) == 0,
                 "two messages and two reads in all; the unit holds 0 again")
         t.check(g.model.onNote?.contains("The unit took it: d[30] 01→00, bit 0.") == true, "the read-back: \(g.model.onNote ?? "nil")")
-        t.check(lines.contains("INPUT 1 on/off: bit 1 (off) asked for")
+        t.check(lines.contains("INPUT 1 mute: bit 1 (mute on) asked for")
                     && lines.filter { $0.hasPrefix("  handed to the helper: ") }.map { String($0.dropFirst(24)) } == g.fake.changes.map(PanelModel.hex)
                     && lines.filter { $0.contains("settings before:") }.count == 2 && lines.filter { $0.contains("settings after:") }.count == 2,
                 "both are in the record: what was asked for, each message as it left, the settings before and after")
@@ -1709,7 +1709,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         // Every other channel's on/off, and the other mixer controls, stay refused.
         let passed = g.fake.passedOn
         t.equal(g.model.setMonitor(strip(inp, 1), on: false), Int32(PANEL_ERR_READ_ONLY), "INPUT 2's on/off: refused")
-        t.check(g.model.refusal?.kind == .notPassed && g.model.refusal?.text.contains("the on/off of INPUT 1") == true,
+        t.check(g.model.refusal?.kind == .notPassed && g.model.refusal?.text.contains("the mute of INPUT 1") == true,
                 "with a plain sentence: \(g.model.refusal?.text ?? "nil")")
         t.equal(g.model.setMonitor(strip(out, 0), on: false), Int32(PANEL_ERR_READ_ONLY), "OUTPUT 1's on/off: refused")
         t.equal(g.model.setOnBitExact(strip(mon, 0), 1), Int32(PANEL_ERR_READ_ONLY), "MONITOR OUT L's on/off: refused")
@@ -1773,10 +1773,10 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(v13.volumes == Set(all) && v13.ons == Set(all) && v13.pans == Allowed.panStrips && v13.pans.count == 20 && all.count == 22
                     && !v13.pan(strip(mon, 0)) && !v13.pan(strip(mon, 1)) && v13.saving && v13.allPatch && !v13.mixer,
                 "version 13's answer: every channel's volume and on/off, the pan of the 20 that have one, and still no link")
-        t.check(v13.words.hasSuffix("the volume of every channel (up to 0 dB), the pan of every INPUT and OUTPUT channel and the on/off of every channel")
-                    && v13.short == "saving · patch bay · mixer volume, pan, on/off", "in words: \(v13.words) / \(v13.short)")
+        t.check(v13.words.hasSuffix("the volume of every channel (up to 0 dB), the pan of every INPUT and OUTPUT channel and the mute of every channel")
+                    && v13.short == "saving · patch bay · mixer volume, pan, mute", "in words: \(v13.words) / \(v13.short)")
         t.check(Allowed.names([strip(inp, 0), strip(out, 1)]) == "INPUT 1, OUTPUT 2" && Allowed.shortNames([strip(mon, 0)]) == name(strip(mon, 0))
-                    && Allowed(passes: FakeHelper.version11, passesOn: FakeHelper.version11On).short.contains("INPUT 1 volume, pan, on/off"),
+                    && Allowed(passes: FakeHelper.version11, passesOn: FakeHelper.version11On).short.contains("INPUT 1 volume, pan, mute"),
                 "a shorter list is still given name by name")
         t.check(PanelModel.hex(PanelModel.volumeMessage(strip(mon, 0), unity)) == "F0 41 10 00 69 12 00 03 00 07 02 00 00 00 00 00 74 F7"
                     && PanelModel.hex(PanelModel.volumeMessage(strip(out, 9), 0x16A09E)) == "F0 41 10 00 69 12 00 05 09 07 01 06 0A 00 09 0E 43 F7"
@@ -1857,7 +1857,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(g.fake.changes.count == sentBefore + 2 * 22 + 2 * 20 + 2 * 22 && g.fake.refused == 0 && g.fake.tooMany == 0 && g.helper.blocked == 0
                     && g.model.guardBlocks == 0 && g.model.snap.disagreements == 0 && g.model.snap.writesAllowed,
                 "\(g.fake.changes.count - sentBefore) messages left for that, none refused by the helper or stopped by a guard, no disagreement; changes still on")
-        t.check(lines.contains("\(name(strip(out, 9))) volume: −3.0 dB (0x16A09E) asked for") && lines.contains { $0.contains("\(name(strip(mon, 1))) on/off: bit 1 (off) asked for") }
+        t.check(lines.contains("\(name(strip(out, 9))) volume: −3.0 dB (0x16A09E) asked for") && lines.contains { $0.contains("\(name(strip(mon, 1))) mute: bit 1 (mute on) asked for") }
                     && lines.contains("  handed to the helper: F0 41 10 00 69 12 00 05 09 07 01 06 0A 00 09 0E 43 F7"),
                 "the record names each channel and gives each message as it was handed to the helper")
 
@@ -1950,7 +1950,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         // A link itself, and what needs one, stay refused before the engine.
         let passed = g.fake.passedOn
         t.equal(g.model.setLink(group: out, pair: 2, on: false), readOnly, "a link: still refused")
-        t.check(g.model.refusal?.kind == .notPassed && g.model.refusal?.text.contains("the on/off of every channel") == true,
+        t.check(g.model.refusal?.kind == .notPassed && g.model.refusal?.text.contains("the mute of every channel") == true,
                 "with a plain sentence: \(g.model.refusal?.text ?? "nil")")
         t.equal(g.model.resetMixer(), readOnly, "Reset Mixer, which changes links: refused")
         g.settle()
@@ -2007,13 +2007,13 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(v14.links == Set(0..<11) && v14.solos == [1, 2] && v14.link(group: mon, pair: 0) && v14.link(group: out, pair: 4)
                     && v14.solo(group: inp) && v14.solo(group: out) && !v14.solo(group: mon) && v14.mixer,
                 "version 14's answer: every pair's link and the solo of INPUT and OUTPUT (MONITOR OUT has none)")
-        t.check(v14.words.hasSuffix("the on/off of every channel, the stereo link of every pair and the solo of INPUT and OUTPUT")
+        t.check(v14.words.hasSuffix("the mute of every channel, the stereo link of every pair and the solo of INPUT and OUTPUT")
                     && v14.short == "saving · patch bay · mixer", "in words: \(v14.words) / \(v14.short)")
         let some = Allowed(passes: FakeHelper.version13 | UInt64(PANEL_PASS_LINK | PANEL_PASS_SOLO),
                            passesOn: FakeHelper.version13On | (PANEL_PASS_LINK_PAIR_0 << 1) | PANEL_PASS_SOLO_GROUP_1)
         t.check(some.links == [1] && some.solos == [1] && some.link(group: inp, pair: 0) && !some.link(group: out, pair: 0) && !some.solo(group: out)
                     && some.words.hasSuffix("the stereo link of INPUT 1-2 and the solo of INPUT")
-                    && some.short.hasSuffix("mixer volume, pan, on/off · INPUT 1-2 link · INPUT solo"),
+                    && some.short.hasSuffix("mixer volume, pan, mute · INPUT 1-2 link · INPUT solo"),
                 "a shorter list is given name by name: \(some.words) / \(some.short)")
         let unflagged = Allowed(passes: FakeHelper.version13, passesOn: FakeHelper.version14On)
         t.check(unflagged.links.isEmpty && unflagged.solos.isEmpty, "pairs and groups named without the two flags are not read")
@@ -2063,7 +2063,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(note.contains("INPUT 3-4 link to bit 1 (linked): sent F0 41 10 00 69 12 00 04 02 01 01 78 F7")
                     && note.contains("The unit took it: d[25] 00→02, bit 1.") && note.contains("Every other byte of the 256 read back the same")
                     && note.contains("The unit said nothing else") && note.contains("still hold different volumes") && note.contains("0x16A09E") && note.contains("0x200000")
-                    && note.contains("The next move of either fader or ON button sets both") && !note.contains("OTHER") && !note.contains("on/off ("),
+                    && note.contains("The next move of either fader or MUTE button sets both") && !note.contains("OTHER") && !note.contains("mutes ("),
                 "the read-back: the one bit and nothing else, and the two volumes that differ: \(note)")
         t.check(lines.contains { $0.contains("INPUT 3-4 link: bit 1 (linked) asked for") }
                     && lines.contains { $0.contains("handed to the helper: F0 41 10 00 69 12 00 04 02 01 01 78 F7") }
@@ -2102,7 +2102,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
             let on = g.model.pairNote ?? "nil"
             t.check(was && between == 0 && unit(g, fLink, group, pair) == 1
                         && off.contains("\(name) link to bit 0 (not linked)") && off.contains("The unit took it: d[\(at)] ") && off.contains(", bit 0.") && !off.contains("OTHER")
-                        && on.contains("\(name) link to bit 1 (linked)") && on.contains("The two channels hold the same volume and on/off.") && !on.contains("OTHER"),
+                        && on.contains("\(name) link to bit 1 (linked)") && on.contains("The two channels hold the same volume and mute.") && !on.contains("OTHER"),
                     "\(name): unlinked and linked again, bit 0 of d[\(at)] each time: \(off) / \(on)")
         }
 
@@ -2208,7 +2208,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         ready(old, passes: FakeHelper.version13, passesOn: FakeHelper.version13On)
         let passedBefore = old.fake.passedOn
         t.equal(old.model.setLink(group: inp, pair: 0, on: true), readOnly, "a version 13 helper: a link is refused")
-        t.check(old.model.refusal?.kind == .notPassed && old.model.refusal?.text.contains("the on/off of every channel") == true, "with a plain sentence: \(old.model.refusal?.text ?? "nil")")
+        t.check(old.model.refusal?.kind == .notPassed && old.model.refusal?.text.contains("the mute of every channel") == true, "with a plain sentence: \(old.model.refusal?.text ?? "nil")")
         t.equal(old.model.toggleSolo(strip(inp, 0)), readOnly, "and a solo")
         t.check(old.model.refusal?.kind == .notPassed, "for the same reason")
         old.settle()
@@ -2947,10 +2947,10 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(text.hasPrefix("UA-101 settings backup\nFormat: 1\nSaved: 2026-11-20 14:05:07\nUnit: UA-101\nWhy: Save Backup\nCheck: ")
                     && text.contains("\n000: 01 01 01 01 01 00 00 02 03 04 05 06 07 08 09 0A\n") && text.contains("\n240: 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00\n"),
                 "plain text: the bytes 16 a line, numbered")
-        t.check(text.contains("Patch bay, OUTPUT 1-2: WAVE OUT 1-2") && text.contains("INPUT 2: volume 0.0 dB (0x200000), pan R100 (0x8000), on, not linked")
-                    && text.contains("MONITOR OUT L: volume 0.0 dB (0x200000), on, linked (MONITOR OUT L-R)") && text.contains("Solo, INPUT: none")
+        t.check(text.contains("Patch bay, OUTPUT 1-2: WAVE OUT 1-2") && text.contains("INPUT 2: volume 0.0 dB (0x200000), pan R100 (0x8000), mute off, not linked")
+                    && text.contains("MONITOR OUT L: volume 0.0 dB (0x200000), mute off, linked (MONITOR OUT L-R)") && text.contains("Solo, INPUT: none")
                     && text.contains("sample rate 48 kHz, SOFT CTRL out, MONO out"),
-                "and a list a person can read: the patch bay, every channel's volume, pan, on and link, the solos")
+                "and a list a person can read: the patch bay, every channel's volume, pan, mute and link, the solos")
         let cut = text.components(separatedBy: "\n").filter { !$0.hasPrefix("240: ") && !$0.hasPrefix("224: ") }.joined(separator: "\n")
         t.check(SettingsBackup.parse(cut) == .failure(.cutShort(224)), "a file cut short (224 of 256 bytes): refused, with the count")
         t.check(SettingsBackup.parse(text.components(separatedBy: "\n").prefix(6).joined(separator: "\n")) == .failure(.cutShort(0)), "a file with no bytes at all: refused")
@@ -3079,7 +3079,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
                     && plan?.changes.contains(PutBackPlan.Change(what: "Patch bay, OUTPUT 1-2", from: "INPUT 1-2", to: "WAVE OUT 1-2")) == true
                     && plan?.changes.contains(PutBackPlan.Change(what: "INPUT 1 volume", from: "0.0 dB", to: "−6.0 dB")) == true
                     && plan?.changes.contains(PutBackPlan.Change(what: "INPUT 3 pan", from: "L100", to: "L38")) == true
-                    && plan?.changes.contains(PutBackPlan.Change(what: "INPUT 5 on/off", from: "on", to: "off")) == true
+                    && plan?.changes.contains(PutBackPlan.Change(what: "INPUT 5 mute", from: "off", to: "on")) == true
                     && plan?.changes.contains(PutBackPlan.Change(what: "INPUT 3-4 link", from: "not linked", to: "linked")) == true
                     && plan?.changes.contains(PutBackPlan.Change(what: "INPUT solo", from: "none", to: "INPUT 3")) == true,
                 "what will change, setting by setting: \(plan?.changes.map { "\($0.what) \($0.from)→\($0.to)" } ?? [])")

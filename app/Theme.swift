@@ -43,6 +43,9 @@ struct Theme {
     let capEdge: Color                        // its outline
     let label: Color                          // under a coloured pill or banner
 
+    /// A lit MUTE key (1.1).
+    var mute: Color { scheme == .dark ? Color(red: 0.90, green: 0.22, blue: 0.19) : Color(red: 0.78, green: 0.14, blue: 0.11) }
+
     /// The red light inside an optical socket.
     var optical: Color { scheme == .dark ? Color(red: 1.00, green: 0.24, blue: 0.20) : Color(red: 0.90, green: 0.14, blue: 0.12) }
 
@@ -51,7 +54,8 @@ struct Theme {
     // charcoal ("3 steel blue"); same steps, the lamps, meters and text unchanged.
     static let dark = Theme(
         name: "dark", scheme: .dark,
-        window: Color(red: 0.056, green: 0.098, blue: 0.154),
+        // 1.1 (the user's choice, 2026-11-27, "C blue steel"): a darker window around the sections.
+        window: Color(red: 0.031, green: 0.051, blue: 0.086),
         panel: Color(red: 0.128, green: 0.206, blue: 0.304),
         strip: Color(red: 0.034, green: 0.064, blue: 0.105),
         line: Color(white: 1, opacity: 0.10),
@@ -242,9 +246,11 @@ struct InsetWell: ViewModifier {
     }
 }
 
-/// A key: raised when off, lit in its colour when on. `flagged` rings it red.
+/// A key: raised with a soft shadow when off; pressed in and glowing in its colour when on.
+/// `flagged` rings it red. In a mixer section it takes that section's colours.
 struct KeyCap: ViewModifier {
     @Environment(\.theme) private var theme
+    @Environment(\.section) private var section
     let on: Bool
     let color: Color
     let radius: CGFloat
@@ -252,16 +258,34 @@ struct KeyCap: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius)
+        let top = section?.keyTop ?? theme.keyTop, bottom = section?.keyBottom ?? theme.keyBottom
+        let light = section?.edgeLight ?? theme.edgeLight
         return content
-            .background(shape.fill(LinearGradient(
-                colors: on ? [color, color] : [theme.keyTop, theme.keyBottom], startPoint: .top, endPoint: .bottom)))
-            // The shine on a lit key.
-            .overlay(shape.fill(LinearGradient(
-                colors: [Color.white.opacity(on ? 0.34 : 0), Color.white.opacity(0)], startPoint: .top, endPoint: .center)))
+            .background(ZStack {
+                if on {
+                    // Its light on the plate around it.
+                    shape.inset(by: -2.5).fill(color.opacity(0.14))
+                    shape.inset(by: -1.25).fill(color.opacity(0.22))
+                    shape.fill(color)
+                    // Pressed in: shaded under the top edge, lit towards the bottom.
+                    shape.fill(LinearGradient(stops: [
+                        .init(color: Color.black.opacity(0.34), location: 0), .init(color: Color.black.opacity(0), location: 0.45),
+                        .init(color: Color.white.opacity(0), location: 0.6), .init(color: Color.white.opacity(0.22), location: 1),
+                    ], startPoint: .top, endPoint: .bottom))
+                } else {
+                    SoftShadow(shape: shape, depth: 2.2, opacity: 0.5, steps: 3)
+                    shape.fill(LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom))
+                    // The shine on its top.
+                    shape.fill(LinearGradient(colors: [Color.white.opacity(0.13), Color.white.opacity(0)],
+                                              startPoint: .top, endPoint: .center))
+                }
+            })
             .overlay(shape.strokeBorder(
-                LinearGradient(colors: [on ? Color.white.opacity(0.55) : theme.edgeLight, theme.edgeDark],
-                               startPoint: .top, endPoint: .bottom), lineWidth: 1))
-            .overlay(shape.strokeBorder(flagged ? theme.bad : Color.clear, lineWidth: 2))
+                on ? LinearGradient(colors: [Color.black.opacity(0.55), Color.white.opacity(0.40)], startPoint: .top, endPoint: .bottom)
+                   : LinearGradient(colors: [light, Color.black.opacity(0.55)], startPoint: .top, endPoint: .bottom),
+                lineWidth: 1))
+            // The unit disagreed: a ring just outside the key, so it shows on a lit red key too.
+            .overlay(shape.inset(by: -2.5).strokeBorder(flagged ? theme.bad : Color.clear, lineWidth: 2))
     }
 }
 
@@ -284,13 +308,17 @@ struct LED: View {
         let c = color ?? theme.on
         ZStack {
             if lit {
-                Circle().fill(RadialGradient(colors: [c.opacity(0.50), c.opacity(0)], center: .center,
+                Circle().fill(RadialGradient(colors: [c.opacity(0.62), c.opacity(0)], center: .center,
                                              startRadius: size * 0.35, endRadius: size * 0.95))
                 Circle().fill(RadialGradient(colors: [Color.white.opacity(0.95), c], center: UnitPoint(x: 0.42, y: 0.36),
                                              startRadius: 0, endRadius: size * 0.5))
                     .frame(width: size, height: size)
             } else {
                 Circle().fill(theme.lampOff).frame(width: size, height: size)
+                // Its glass dome catches the light.
+                Circle().fill(RadialGradient(colors: [Color.white.opacity(0.28), Color.white.opacity(0)],
+                                             center: UnitPoint(x: 0.38, y: 0.32), startRadius: 0, endRadius: size * 0.32))
+                    .frame(width: size, height: size)
             }
             Circle().strokeBorder(theme.edgeDark.opacity(0.7), lineWidth: 0.75).frame(width: size, height: size)
         }
@@ -395,4 +423,261 @@ struct Kept<Value>: DynamicProperty {
     }
 
     var projectedValue: Binding<Value> { state.projectedValue }
+}
+
+// MARK: 1.1: each section its own metal (the user's choice, 2026-11-27)
+//
+// The three mixer sections are told apart by their metal and their fader caps: INPUT a lighter
+// grey-blue with black caps, OUTPUT a darker slate with silver caps, MONITOR OUT dark with red
+// caps. Depth stays cheap: gradients, one-point edges, and soft shadows made of a few
+// see-through copies of a shape, never a blur. The brushed grain is one picture, drawn once
+// when first needed and kept; nothing of it is drawn again when a meter moves.
+
+extension Color {
+    /// 0xRRGGBB.
+    init(hex: UInt32, opacity: Double = 1) {
+        self.init(red: Double((hex >> 16) & 0xff) / 255, green: Double((hex >> 8) & 0xff) / 255,
+                  blue: Double(hex & 0xff) / 255, opacity: opacity)
+    }
+}
+
+/// A fader cap's material.
+struct CapLook {
+    let top: Color, bottom: Color   // its body, lit from above
+    let shine: Color                // the highlight on its top face
+    let ridgeDark: Color, ridgeLight: Color
+    let mark: Color                 // the line across its middle
+    let edge: Color
+
+    /// INPUT: black, with a white line.
+    static let black = CapLook(top: Color(hex: 0x4a4e55), bottom: Color(hex: 0x0b0c0e), shine: Color.white.opacity(0.30),
+                               ridgeDark: Color.black.opacity(0.85), ridgeLight: Color.white.opacity(0.16),
+                               mark: Color(hex: 0xf4f6f8), edge: Color.black)
+    /// OUTPUT: silver.
+    static let silver = CapLook(top: Color(hex: 0xf6f8fa), bottom: Color(hex: 0x8c96a2), shine: Color.white.opacity(0.70),
+                                ridgeDark: Color(hex: 0x56606c, opacity: 0.85), ridgeLight: Color.white.opacity(0.75),
+                                mark: Color(hex: 0x101418), edge: Color(hex: 0x2a3038))
+    /// MONITOR OUT: red.
+    static let red = CapLook(top: Color(hex: 0xf0574a), bottom: Color(hex: 0x86140f), shine: Color.white.opacity(0.38),
+                             ridgeDark: Color(hex: 0x3e0604, opacity: 0.80), ridgeLight: Color.white.opacity(0.22),
+                             mark: Color(hex: 0xfff4f0), edge: Color(hex: 0x2a0402))
+}
+
+/// How one section of the mixer looks.
+struct SectionLook {
+    let plateTop: Color, plateBottom: Color   // its metal
+    let laneTop: Color, laneBottom: Color     // a channel's lane, pressed a shade into the plate
+    let text: Color, dim: Color, tick: Color  // words and scale marks on it
+    let edgeLight: Color, edgeDark: Color     // its bevel
+    let keyTop: Color, keyBottom: Color, keyText: Color // a key that is off
+    let arc: Color                            // a knob's lit arc
+    let grain: Double                         // how strong the brushed grain is
+    let cap: CapLook
+}
+
+extension SectionLook {
+    private static func plate(_ top: UInt32, _ bottom: UInt32, lane: (UInt32, UInt32), text: UInt32, dim: UInt32, tick: Double,
+                              light: Double, key: (UInt32, UInt32), keyText: UInt32, arc: UInt32, grain: Double,
+                              cap: CapLook) -> SectionLook {
+        let darkWords = Color(hex: text).isDarkish
+        return SectionLook(plateTop: Color(hex: top), plateBottom: Color(hex: bottom),
+                           laneTop: Color(hex: lane.0), laneBottom: Color(hex: lane.1),
+                           text: Color(hex: text), dim: Color(hex: dim),
+                           tick: (darkWords ? Color.black : Color.white).opacity(tick),
+                           edgeLight: Color.white.opacity(light), edgeDark: Color.black.opacity(0.62),
+                           keyTop: Color(hex: key.0), keyBottom: Color(hex: key.1), keyText: Color(hex: keyText),
+                           arc: Color(hex: arc), grain: grain, cap: cap)
+    }
+
+    // The dark look: "C blue steel", the user's choice of three (2026-11-27). [MONITOR OUT,
+    // INPUT, OUTPUT], as the engine numbers the groups.
+    static let darkBlue: [SectionLook] = [
+        plate(0x16181c, 0x0c0d10, lane: (0x0e0f12, 0x121316), text: 0xeef0f3, dim: 0x959ba5, tick: 0.30,
+              light: 0.13, key: (0x2c2f35, 0x1d1f24), keyText: 0xa0a7b1, arc: 0xff8a7c, grain: 0.30, cap: .red),
+        plate(0x55708f, 0x435a77, lane: (0x445b78, 0x4c6483), text: 0xf6f9fc, dim: 0xd5e2f2, tick: 0.42,
+              light: 0.30, key: (0x66819f, 0x506986), keyText: 0xe2ebf6, arc: 0xe8f3ff, grain: 0.70, cap: .black),
+        plate(0x223247, 0x182537, lane: (0x172334, 0x1c293b), text: 0xeef3f8, dim: 0xa3b5cb, tick: 0.32,
+              light: 0.16, key: (0x324560, 0x24354c), keyText: 0xafc0d5, arc: 0xd8e8ff, grain: 0.42, cap: .silver),
+    ]
+    /// The light look: the same three steps, lighter, on the putty window.
+    static let lightSlate: [SectionLook] = [
+        plate(0x34373c, 0x26282c, lane: (0x24262a, 0x2b2d31), text: 0xf1f2f4, dim: 0xb0b5bc, tick: 0.32,
+              light: 0.20, key: (0x4a4d53, 0x37393e), keyText: 0xc0c5cc, arc: 0xff9a8c, grain: 0.50, cap: .red),
+        plate(0xbcc6d2, 0xa4afbd, lane: (0xa5b0be, 0xb0bbc8), text: 0x141a22, dim: 0x333d4a, tick: 0.42,
+              light: 0.60, key: (0xd2dae3, 0xb6c0cd), keyText: 0x2a3340, arc: 0x154c95, grain: 0.85, cap: .black),
+        plate(0x66727f, 0x535e6b, lane: (0x515c69, 0x5a6572), text: 0xf3f5f8, dim: 0xd0d8e2, tick: 0.40,
+              light: 0.28, key: (0x7b8794, 0x626d7a), keyText: 0xdde3ea, arc: 0xe4efff, grain: 0.65, cap: .silver),
+    ]
+
+    /// A plain bar plate in a dark look's colours.
+    private static func darkBar(_ top: UInt32, _ bottom: UInt32) -> SectionLook {
+        plate(top, bottom, lane: (0x000000, 0x000000), text: 0xeef1f5, dim: 0xa6b2c2, tick: 0.3, light: 0.16,
+              key: (0x3a4250, 0x2a313c), keyText: 0xb2bdcb, arc: 0xe6f2ff, grain: 0.38, cap: .silver)
+    }
+
+    /// The dark look's bar below the mixer: navy steel, as the blue steel sections.
+    static let darkBlueBar = darkBar(0x1e2b3d, 0x152131)
+
+    /// The bar below the mixer: a plain brushed plate in the look's own colours.
+    static func bar(_ t: Theme) -> SectionLook {
+        SectionLook(plateTop: t.raisedTop, plateBottom: t.raisedBottom, laneTop: t.insetTop, laneBottom: t.insetBottom,
+                    text: t.text, dim: t.dim, tick: t.line, edgeLight: t.edgeLight, edgeDark: t.edgeDark,
+                    keyTop: t.keyTop, keyBottom: t.keyBottom, keyText: t.dim, arc: t.glow,
+                    grain: t.scheme == .dark ? 0.55 : 0.75, cap: .silver)
+    }
+}
+
+extension Color {
+    /// Rough: is this a dark colour (for choosing light or dark marks on it)?
+    var isDarkish: Bool {
+        guard let c = NSColor(self).usingColorSpace(.sRGB) else { return false }
+        return 0.299 * c.redComponent + 0.587 * c.greenComponent + 0.114 * c.blueComponent < 0.5
+    }
+}
+
+extension Theme {
+    /// The section a strip of `group` sits in.
+    func section(_ group: Int) -> SectionLook {
+        let set = scheme == .dark ? SectionLook.darkBlue : SectionLook.lightSlate
+        return set[max(0, min(set.count - 1, group))]
+    }
+    /// The bar below the mixer.
+    var bar: SectionLook { scheme == .dark ? SectionLook.darkBlueBar : SectionLook.bar(self) }
+}
+
+private struct SectionKey: EnvironmentKey { static let defaultValue: SectionLook? = nil }
+
+extension EnvironmentValues {
+    /// The section a control sits in; nil outside the mixer's sections.
+    var section: SectionLook? {
+        get { self[SectionKey.self] }
+        set { self[SectionKey.self] = newValue }
+    }
+}
+
+// MARK: brushed metal
+
+/// The grain of brushed metal: fine streaks along the width, light and dark. One picture,
+/// made once and kept, that tiles without a seam; laid over a plate's colour.
+enum BrushedGrain {
+    static let tile: CGImage? = make(width: 1024, height: 192, seed: 0x5eed_101)
+
+    /// Same every time (a fixed seed), so the pictures don't change from one drawing to the next.
+    static func make(width w: Int, height h: Int, seed: UInt64) -> CGImage? {
+        var state = seed
+        func random() -> Double { // -1 ... 1
+            state = state &* 6364136223846793005 &+ 1442695040888963407
+            return Double(Int64(bitPattern: state >> 11) % 1_000_000) / 1_000_000 * 2 - 1
+        }
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        var line = [Double](repeating: 0, count: 2 * w)
+        for y in 0..<h {
+            // A slowly wandering streak along the row, twice as long as the tile; its two halves
+            // are blended so the row's end meets its start.
+            let base = random() * 0.55
+            var s = 0.0
+            for x in 0..<(2 * w) {
+                s = s * 0.985 + random() * 0.11
+                line[x] = s
+            }
+            for x in 0..<w {
+                let t = Double(x) / Double(w)
+                let v = base + (line[x] * t + line[x + w] * (1 - t)) + random() * 0.20
+                let a = min(1, abs(v)) * 0.16 * 255
+                let c = v > 0 ? a : 0 // premultiplied: white, or black
+                let i = (y * w + x) * 4
+                pixels[i] = UInt8(c); pixels[i + 1] = UInt8(c); pixels[i + 2] = UInt8(c); pixels[i + 3] = UInt8(a)
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
+                       space: CGColorSpaceCreateDeviceRGB(),
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+    }
+}
+
+/// The grain over a shape, at a strength.
+struct Grain<S: Shape>: View {
+    let shape: S
+    let strength: Double
+
+    var body: some View {
+        if let tile = BrushedGrain.tile, strength > 0 {
+            Image(decorative: tile, scale: 2).resizable(resizingMode: .tile)
+                .opacity(strength).clipShape(shape).allowsHitTesting(false)
+        }
+    }
+}
+
+/// A soft shadow made of a few see-through copies of a shape, each a little larger and lower.
+/// No blur: it is drawn like any other shape.
+struct SoftShadow<S: InsettableShape>: View {
+    let shape: S
+    var depth: CGFloat = 3
+    var opacity: Double = 0.45
+    var steps = 4
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<steps, id: \.self) { i in
+                let k = CGFloat(i + 1) / CGFloat(steps)
+                shape.inset(by: -k * depth * 0.7).fill(Color.black.opacity(opacity / Double(steps)))
+                    .offset(y: k * depth)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// A plate of brushed metal with bevelled edges and a soft shadow on what is behind it.
+struct MetalPlate: ViewModifier {
+    let look: SectionLook
+    let radius: CGFloat
+    var shadow = true
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius)
+        return content.background(ZStack {
+            if shadow { SoftShadow(shape: shape, depth: 4, opacity: 0.5) }
+            shape.fill(LinearGradient(colors: [look.plateTop, look.plateBottom], startPoint: .top, endPoint: .bottom))
+            Grain(shape: shape, strength: look.grain)
+            // A faint sheen across the plate, as light falls on metal.
+            shape.fill(LinearGradient(stops: [
+                .init(color: Color.white.opacity(0.07), location: 0), .init(color: Color.white.opacity(0), location: 0.35),
+                .init(color: Color.white.opacity(0.04), location: 0.7), .init(color: Color.white.opacity(0), location: 1),
+            ], startPoint: .topLeading, endPoint: .bottomTrailing))
+            // The bevel: lit along the top and left, shaded along the bottom and right, and a fine
+            // dark fold just inside.
+            shape.strokeBorder(LinearGradient(colors: [look.edgeLight, look.edgeLight.opacity(0.4), look.edgeDark],
+                                              startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+            shape.inset(by: 1.5).strokeBorder(Color.black.opacity(0.22), lineWidth: 0.5)
+        }
+        // Flattened into one picture, kept until the plate's size or colours change: a meter
+        // moving over it doesn't draw the grain, the sheen and the bevel again.
+        .drawingGroup())
+    }
+}
+
+/// A channel's lane: pressed a shade into its plate, its edges engraved.
+struct EngravedLane: ViewModifier {
+    let look: SectionLook
+    let radius: CGFloat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius)
+        return content
+            .background(shape.fill(LinearGradient(colors: [look.laneTop, look.laneBottom], startPoint: .top, endPoint: .bottom)))
+            .overlay(shape.strokeBorder(LinearGradient(colors: [Color.black.opacity(0.42), look.edgeLight.opacity(0.9)],
+                                                       startPoint: .top, endPoint: .bottom), lineWidth: 1))
+    }
+}
+
+extension View {
+    func metalPlate(_ look: SectionLook, radius: CGFloat = 14, shadow: Bool = true) -> some View {
+        modifier(MetalPlate(look: look, radius: radius, shadow: shadow))
+    }
+    func engravedLane(_ look: SectionLook, radius: CGFloat = 8) -> some View {
+        modifier(EngravedLane(look: look, radius: radius))
+    }
 }

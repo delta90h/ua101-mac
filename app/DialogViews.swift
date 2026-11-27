@@ -86,7 +86,7 @@ struct PutBackView: View {
     static let listHeight: CGFloat = 190
 
     /// The warning's words: what is overwritten, and what is saved first.
-    static let overwriteWords = "The patch bay and the mixer in use now are overwritten with the backup's, in the settings listed above. Volumes, on/off and the patch bay change at once, and what you hear can jump."
+    static let overwriteWords = "The patch bay and the mixer in use now are overwritten with the backup's, in the settings listed above. Volumes, mutes and the patch bay change at once, and what you hear can jump."
     static let backupFirstWords = "A backup of the settings in use now is saved first, by itself, so you can go back with Open Backup. Turn the monitors down and take headphones off first."
 
     var body: some View {
@@ -295,7 +295,7 @@ struct IntoMemoryView: View {
                     Text("⚠︎").font(.panel(15, .bold)).foregroundColor(theme.bad)
                     Text("Turn the monitors down and take headphones off first.").font(.panel(12.5, .bold)).foregroundColor(theme.text).copyable()
                 }
-                Text("For a few seconds the unit plays with the file's settings: volumes, on/off and the patch bay jump there and back. What \(name) holds now is overwritten and can't be brought back from here.")
+                Text("For a few seconds the unit plays with the file's settings: volumes, mutes and the patch bay jump there and back. What \(name) holds now is overwritten and can't be brought back from here.")
                     .font(.panel(11.5)).foregroundColor(theme.text).fixedSize(horizontal: false, vertical: true).copyable()
             }
             .padding(10)
@@ -565,7 +565,7 @@ struct MemoryDialogView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(purpose == .load ? "WHAT TO LOAD" : "WHAT TO STORE").font(.panel(9, .bold)).foregroundColor(theme.dim).copyable()
                     check("Patch bay", on: patchBay) { patchBay.toggle() }
-                    check("Direct monitor mixer (on/off, pan, volume, link)", on: mixer) { mixer.toggle() }
+                    check("Direct monitor mixer (mute, pan, volume, link)", on: mixer) { mixer.toggle() }
                 }
             }
             // What a Recall, Save or Reset did is in the Messages window (2026-11-16), so the

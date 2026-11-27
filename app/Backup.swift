@@ -195,13 +195,14 @@ struct SettingsBackup: Equatable {
 
     static func rateWords(_ s: Switches) -> String { s.rateHz == 0 ? "an unknown rate" : Format.rate(s.rateHz) + " kHz" }
 
-    /// The on/off bit in words. Bit 1 mutes (heard on INPUT 1, 2026-11-14, and taken to be so
-    /// for every channel, as the engine does).
-    static func onWords(_ bit: UInt32) -> String { bit != 0 ? "off" : "on" }
+    /// The on/off bit as the mute in words (1.1: the app calls it MUTE): bit 1 is "on", the
+    /// channel muted (heard on INPUT 1, 2026-11-14, and taken to be so for every channel, as the
+    /// engine does).
+    static func onWords(_ bit: UInt32) -> String { bit != 0 ? "on" : "off" } // the mute (1.1)
     static func soloWords(group: Int, _ v: UInt32) -> String { v == 0 ? "none" : "\(ChannelNames.groupTitle[group]) \(v)" }
 
     /// The readable list in the file: the switches, the patch bay, and every channel's
-    /// volume, pan, on/off and link, and the solos.
+    /// volume, pan, mute and link, and the solos.
     static func describe(_ block: [UInt8]) -> [String] {
         let sw = switches(block)
         var out: [String] = []
@@ -219,7 +220,7 @@ struct SettingsBackup: Equatable {
                 let p = value(block, fPan, s.group, s.channel)
                 line += ", pan \(Format.pan(p)) " + String(format: "(0x%04X)", p)
             }
-            line += ", \(onWords(value(block, fOn, s.group, s.channel)))"
+            line += ", mute \(onWords(value(block, fOn, s.group, s.channel)))"
             line += value(block, fLink, s.group, s.channel / 2) != 0 ? ", linked (\(ChannelNames.pair(group: s.group, pair: s.channel / 2)))" : ", not linked"
             out.append(line)
         }
@@ -298,7 +299,7 @@ struct PutBackPlan: Equatable {
         for g in 0..<3 {
             let pairs = g == ChannelNames.groupMonitor ? 1 : 5
             if (0..<pairs).contains(where: { PanelModel.linkPlace(group: g, pair: $0).byte == i }) { return "\(ChannelNames.groupTitle[g]) links" }
-            if (0..<pairs * 2).contains(where: { PanelModel.onPlace(StripID(group: g, channel: $0)).byte == i }) { return "\(ChannelNames.groupTitle[g]) on/off" }
+            if (0..<pairs * 2).contains(where: { PanelModel.onPlace(StripID(group: g, channel: $0)).byte == i }) { return "\(ChannelNames.groupTitle[g]) mute" }
         }
         return byteName(i)
     }
@@ -373,7 +374,7 @@ struct PutBackPlan: Equatable {
                 if bp != up { plan.changes.append(Change(what: "\(name) pan", from: Format.pan(up), to: Format.pan(bp))) }
             }
             let bo = val(backup, fOn, s.group, s.channel), uo = val(unit, fOn, s.group, s.channel)
-            if bo != uo { plan.changes.append(Change(what: "\(name) on/off", from: SettingsBackup.onWords(uo), to: SettingsBackup.onWords(bo))) }
+            if bo != uo { plan.changes.append(Change(what: "\(name) mute", from: SettingsBackup.onWords(uo), to: SettingsBackup.onWords(bo))) }
             if s.channel % 2 == 0 {
                 let pair = s.channel / 2
                 let bl = val(backup, fLink, s.group, pair), ul = val(unit, fLink, s.group, pair)

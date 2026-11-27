@@ -90,7 +90,7 @@ final class MessageCenter: ObservableObject {
         note(model.$patchNote, .patch, "Patch bay")
         note(model.$volumeNote, .volume, "Volume")
         note(model.$panNote, .pan, "Pan")
-        note(model.$onNote, .onOff, "On/off")
+        note(model.$onNote, .onOff, "Mute")
         note(model.$pairNote, .link, "Link")
         note(model.$soloNote, .solo, "Solo")
         note(model.$memoryNote, .memory, "Memory")

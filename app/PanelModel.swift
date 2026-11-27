@@ -698,7 +698,7 @@ final class PanelModel: ObservableObject {
         switch kind {
         case Int32(PANEL_F_VOLUME): name = ChannelNames.full(StripID(group: g, channel: i)) + " volume"
         case Int32(PANEL_F_PAN): name = ChannelNames.full(StripID(group: g, channel: i)) + " pan"
-        case Int32(PANEL_F_ON): name = ChannelNames.full(StripID(group: g, channel: i)) + " on/off"
+        case Int32(PANEL_F_ON): name = ChannelNames.full(StripID(group: g, channel: i)) + " mute"
         case Int32(PANEL_F_LINK): name = ChannelNames.pair(group: g, pair: i) + " link"
         case Int32(PANEL_F_SOLO): name = "\(ChannelNames.groupTitle[min(g, 2)]) solo"
         case Int32(PANEL_F_PATCH): name = "Patch bay, " + ChannelNames.outputPairs[min(i, 4)]
@@ -780,7 +780,7 @@ final class PanelModel: ObservableObject {
         }
         if let w = onWatch {
             onWatch = nil
-            onNote = "\(ChannelNames.full(w.strip)) on/off: the driver's helper refused a message. What the unit holds now is shown."
+            onNote = "\(ChannelNames.full(w.strip)) mute: the driver's helper refused a message. What the unit holds now is shown."
         }
         if let w = linkWatch {
             linkWatch = nil
@@ -1235,10 +1235,12 @@ final class PanelModel: ObservableObject {
         panel_on_message(UInt32(s.group), UInt32(s.channel), UInt32(bit), &bytes)
         return bytes
     }
-    /// The bit with its meaning: "bit 1 (off)". Bit 1 mutes: heard on INPUT 1, 2026-11-14.
+    /// The bit with its meaning: "bit 1 (mute on)". Bit 1 mutes: heard on INPUT 1, 2026-11-14.
+    /// Since 1.1 the app calls the switch MUTE (the user's wish, 2026-11-27): lit, the channel
+    /// is muted.
     func onWords(_ bit: Int) -> String {
-        let off = (bit != 0) == (panel_on_bit_is_mute(engine) != 0)
-        return "bit \(bit) (\(off ? "off" : "on"))"
+        let muted = (bit != 0) == (panel_on_bit_is_mute(engine) != 0)
+        return "bit \(bit) (mute \(muted ? "on" : "off"))"
     }
 
     /// One channel's monitor on/off. For the UA-101 this sets the block's bit, 0 or 1; which
@@ -1248,7 +1250,7 @@ final class PanelModel: ObservableObject {
     @discardableResult
     func setMonitor(_ s: StripID, on: Bool) -> Int32 {
         let bit = on == (panel_on_bit_is_mute(engine) == 0) ? 1 : 0
-        return setOnBit(s, bit, what: ChannelNames.full(s) + (on ? " on" : " off"))
+        return setOnBit(s, bit, what: ChannelNames.full(s) + (on ? " mute off" : " mute on"))
     }
 
     /// The bit itself, 0 or 1, once, with no drag around it (Device menu; the first on/off
@@ -1256,7 +1258,7 @@ final class PanelModel: ObservableObject {
     @discardableResult
     func setOnBitExact(_ s: StripID, _ bit: Int) -> Int32 {
         endKeyHold()
-        return setOnBit(s, bit, what: ChannelNames.full(s) + " on/off")
+        return setOnBit(s, bit, what: ChannelNames.full(s) + " mute")
     }
 
     private func setOnBit(_ s: StripID, _ bit: Int, what: String) -> Int32 {
@@ -1269,14 +1271,14 @@ final class PanelModel: ObservableObject {
         let r = panel_set_on_bit(engine, UInt32(s.group), UInt32(s.channel), Int32(bit), scheduler.now)
         if r == Int32(PANEL_OK), !transport.isPretend, onWatch == nil, panel_unchecked(engine) == waiting {
             // The engine sends nothing for a value the unit already holds.
-            onNote = "\(ChannelNames.full(s)) on/off to \(onWords(bit)): the unit already has that bit. Nothing was sent."
+            onNote = "\(ChannelNames.full(s)) \(onWords(bit)): the unit already has that bit. Nothing was sent."
             record(onNote!)
         } else if r == Int32(PANEL_OK), !transport.isPretend {
-            if let old = onWatch { record("  \(ChannelNames.full(old.strip)) on/off: another on/off was changed before its read-back came.") }
+            if let old = onWatch { record("  \(ChannelNames.full(old.strip)) mute: another mute was changed before its read-back came.") }
             let sent = Self.onMessage(s, bit: bit)
             onWatch = OnWatch(strip: s, bit: bit, sent: sent, before: before, blocks: blocks, others: others, partner: linkedPartner(s))
-            onNote = "\(ChannelNames.full(s)) on/off to \(onWords(bit)) asked for. Reading the settings back…"
-            record("\(ChannelNames.full(s)) on/off: \(onWords(bit)) asked for")
+            onNote = "\(ChannelNames.full(s)) \(onWords(bit)) asked for. Reading the settings back…"
+            record("\(ChannelNames.full(s)) mute: \(onWords(bit)) asked for")
             record("  settings before: \(Self.hex(before))")
         }
         return done(r, what)
@@ -1289,7 +1291,7 @@ final class PanelModel: ObservableObject {
     /// the partner's bit too (it lies in the same byte), and nothing else.
     private func checkOn() {
         guard let w = onWatch else { return }
-        let what = ChannelNames.full(w.strip) + " on/off"
+        let what = ChannelNames.full(w.strip) + " mute"
         if !snap.known {
             onWatch = nil
             onNote = "\(what): sent, but the unit stopped answering before the settings were read back."
@@ -1309,7 +1311,7 @@ final class PanelModel: ObservableObject {
         let byte = String(format: "d[%d] %02X→%02X", at, w.before[at], after[at])
         // The partner of a linked pair: channels 2k and 2k+1 share a byte, four bits a byte.
         let partnerMask: UInt8 = w.partner.map { UInt8(1 << Self.onPlace($0).bit) } ?? 0
-        var text = "\(what) to \(onWords(w.bit)): sent \(Self.hex(w.sent))"
+        var text = "\(ChannelNames.full(w.strip)) \(onWords(w.bit)) sent \(Self.hex(w.sent))"
         if let p = w.partner {
             text += " and, for \(ChannelNames.full(p)), which is linked with it, \(Self.hex(Self.onMessage(p, bit: w.bit)))"
         }
@@ -1333,7 +1335,7 @@ final class PanelModel: ObservableObject {
             }
         }
         if (w.before[at] & ~(mask | partnerMask)) != (after[at] & ~(mask | partnerMask)) {
-            text += String(format: " THE OTHER BITS OF d[%d] MOVED TOO (other channels' on/off).", at)
+            text += String(format: " THE OTHER BITS OF d[%d] MOVED TOO (other channels' mute).", at)
         }
         let elsewhere = (0..<256).filter { after[$0] != w.before[$0] && $0 != at }
         if elsewhere.isEmpty {
@@ -1449,12 +1451,12 @@ final class PanelModel: ObservableObject {
             let va = snap.channels[a.group][a.channel].volume, vb = snap.channels[b.group][b.channel].volume
             let oa = snap.channels[a.group][a.channel].on, ob = snap.channels[b.group][b.channel].on
             if va == vb, oa == ob {
-                text += " The two channels hold the same volume and on/off."
+                text += " The two channels hold the same volume and mute."
             } else {
                 var differ: [String] = []
                 if va != vb { differ.append("volumes (\(Self.volumeWords(va)) and \(Self.volumeWords(vb)))") }
-                if oa != ob { differ.append("on/off (\(oa ? "on" : "off") and \(ob ? "on" : "off"))") }
-                text += " The two channels still hold different \(differ.joined(separator: " and ")): the link itself changed neither. The next move of either fader or ON button sets both."
+                if oa != ob { differ.append("mutes (\(oa ? "off" : "on") and \(ob ? "off" : "on"))") }
+                text += " The two channels still hold different \(differ.joined(separator: " and ")): the link itself changed neither. The next move of either fader or MUTE button sets both."
             }
         }
         pairNote = text
