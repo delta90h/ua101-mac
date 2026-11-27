@@ -494,7 +494,7 @@ struct StripView: View {
                     .foregroundColor(ch.on ? sec.keyText : Color.white)
                     .frame(width: 38, height: 20)
                     .keycap(on: !ch.on, color: theme.mute, radius: 10,
-                            flagged: d?.touches(id, kind: Int32(PANEL_F_ON)) == true)
+                            flagged: d?.touches(id, kind: Int32(PANEL_F_ON)) == true, diode: theme.muteDiode)
             }
             .buttonStyle(.plain)
             .help(ch.on ? "Mute: click to mute this channel in the monitor mix" : "Muted: click to let this channel into the monitor mix again")
@@ -512,7 +512,8 @@ struct StripView: View {
                     .foregroundColor(soloed ? theme.soloText : sec.keyText)
                     .frame(width: 38, height: 15)
                     .keycap(on: soloed, color: theme.solo, radius: 7.5,
-                            flagged: d.map { Int32($0.kind) == Int32(PANEL_F_SOLO) && $0.group == id.group } ?? false)
+                            flagged: d.map { Int32($0.kind) == Int32(PANEL_F_SOLO) && $0.group == id.group } ?? false,
+                            diode: theme.soloDiode)
             }
             .buttonStyle(.plain)
             .help("Solo: this channel alone, of its group. One channel of INPUT and one of OUTPUT can be soloed; a click on a lit SOLO puts it out")

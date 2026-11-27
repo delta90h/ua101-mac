@@ -49,6 +49,10 @@ struct Theme {
     /// (the user's choice, 2026-11-27), with dark words on it. The other warnings keep `warn`.
     var solo: Color { Color(red: 250 / 255, green: 158 / 255, blue: 18 / 255) }
     var soloText: Color { Color(red: 0.04, green: 0.06, blue: 0.08) }
+    /// The light of the diode behind a lit MUTE or SOLO key (the user's wish, 2026-11-27): it
+    /// pools in the middle of the key and fades to the key's own colour at its edges.
+    var muteDiode: Color { Color(hex: 0xff2a1f) }
+    var soloDiode: Color { Color(hex: 0xffeab0) }
 
     /// The red light inside an optical socket.
     var optical: Color { scheme == .dark ? Color(red: 1.00, green: 0.24, blue: 0.20) : Color(red: 0.90, green: 0.14, blue: 0.12) }
@@ -259,6 +263,8 @@ struct KeyCap: ViewModifier {
     let color: Color
     let radius: CGFloat
     var flagged = false
+    /// A diode behind the key: its light, when lit.
+    var diode: Color? = nil
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius)
@@ -271,6 +277,12 @@ struct KeyCap: ViewModifier {
                     shape.inset(by: -2.5).fill(color.opacity(0.14))
                     shape.inset(by: -1.25).fill(color.opacity(0.22))
                     shape.fill(color)
+                    if let diode {
+                        // Lit by a diode behind it, through coloured plastic: bright in the middle,
+                        // the key's own colour at its edges.
+                        shape.fill(EllipticalGradient(colors: [diode.opacity(0.85), diode.opacity(0.35), diode.opacity(0)],
+                                                      center: UnitPoint(x: 0.5, y: 0.55), endRadiusFraction: 0.62))
+                    }
                     // Pressed in: shaded under the top edge, lit towards the bottom.
                     shape.fill(LinearGradient(stops: [
                         .init(color: Color.black.opacity(0.34), location: 0), .init(color: Color.black.opacity(0), location: 0.45),
@@ -296,8 +308,8 @@ struct KeyCap: ViewModifier {
 extension View {
     func raised(_ radius: CGFloat = 6) -> some View { modifier(RaisedPlate(radius: radius)) }
     func inset(_ radius: CGFloat = 6, flagged: Bool = false) -> some View { modifier(InsetWell(radius: radius, flagged: flagged)) }
-    func keycap(on: Bool, color: Color, radius: CGFloat = 5, flagged: Bool = false) -> some View {
-        modifier(KeyCap(on: on, color: color, radius: radius, flagged: flagged))
+    func keycap(on: Bool, color: Color, radius: CGFloat = 5, flagged: Bool = false, diode: Color? = nil) -> some View {
+        modifier(KeyCap(on: on, color: color, radius: radius, flagged: flagged, diode: diode))
     }
 }
 
