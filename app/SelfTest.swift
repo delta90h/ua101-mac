@@ -341,7 +341,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         b.model.setPatch(output: 4, source: 1)
         b.settle()
         t.equal(unitValue(b, Int32(PANEL_F_PATCH), 0, 4), 1, "OUTPUT 9-10 plays MONITOR OUT")
-        t.equal(ChannelNames.sourceName(b.model.snap.patch[4]), "MAIN OUT", "and is named so")
+        t.equal(ChannelNames.sourceName(b.model.snap.patch[4]), "MONITOR OUT", "and is named so")
     }
 
     // ---- 7
@@ -2979,7 +2979,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
                     && text.contains("\n000: 01 01 01 01 01 00 00 02 03 04 05 06 07 08 09 0A\n") && text.contains("\n240: 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00\n"),
                 "plain text: the bytes 16 a line, numbered")
         t.check(text.contains("Patch bay, OUTPUT 1-2: WAVE OUT 1-2") && text.contains("INPUT 2: volume 0.0 dB (0x200000), pan R100 (0x8000), mute off, not linked")
-                    && text.contains("MAIN OUT L: volume 0.0 dB (0x200000), mute off, linked (MAIN OUT L-R)") && text.contains("Solo, INPUT: none")
+                    && text.contains("MONITOR OUT L: volume 0.0 dB (0x200000), mute off, linked (MONITOR OUT L-R)") && text.contains("Solo, INPUT: none")
                     && text.contains("sample rate 48 kHz, SOFT CTRL out, MONO out"),
                 "and a list a person can read: the patch bay, every channel's volume, pan, mute and link, the solos")
         let cut = text.components(separatedBy: "\n").filter { !$0.hasPrefix("240: ") && !$0.hasPrefix("224: ") }.joined(separator: "\n")
@@ -3287,7 +3287,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         b.model.confirmPutBack()
         b.settle()
         t.check(b.model.putBackNote?.contains("THE UNIT DIFFERS from the backup in") == true && b.model.putBackNote?.contains("that should match") == true
-                    && b.model.putBackNote?.contains("(MAIN OUT L volume)") == true && b.messages.now.contains { $0.slot == .putBack && $0.warning },
+                    && b.model.putBackNote?.contains("(MONITOR OUT L volume)") == true && b.messages.now.contains { $0.slot == .putBack && $0.warning },
                 "Put Back when the unit keeps its volumes: a warning that names the bytes: \(b.model.putBackNote ?? "nil")")
         b.unit.ignore(kind: -1)
         b.model.dismissDisagreement()
