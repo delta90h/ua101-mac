@@ -662,13 +662,13 @@ struct GroupView: View {
         let sec = theme.section(group)
         VStack(alignment: .leading, spacing: 8) {
             // The title in the middle of its section; INPUT and OUTPUT have a line on each side
-            // of it, white in the dark look and black in the light one (the user's picture,
-            // 2026-11-27). Two lines of equal give keep the title in the middle.
+            // of it in the title's own colour: white on a dark plate, black on a light one (the
+            // user's picture, 2026-11-27; 3 points thick). Two lines of equal give keep the title in the middle.
             // MONITOR OUT has no lines, and no room to spare: its title alone, no wider than its strips.
             let lined = group != ChannelNames.groupMonitor
             HStack(spacing: lined ? 12 : 0) {
-                let line = Capsule().fill(theme.scheme == .dark ? Color.white.opacity(0.9) : Color.black.opacity(0.85))
-                    .frame(height: 1.5).frame(maxWidth: .infinity)
+                let line = Capsule().fill(sec.text.opacity(0.9))
+                    .frame(height: 3).frame(maxWidth: .infinity)
                 if lined { line } else { Spacer(minLength: 0) }
                 Text(ChannelNames.sectionTitle[group]).font(.panel(11, .bold)).tracking(1.2).foregroundColor(sec.text)
                     .lineLimit(1).fixedSize().copyable()
