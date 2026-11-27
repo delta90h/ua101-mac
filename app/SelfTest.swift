@@ -4902,6 +4902,43 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(absent.isEmpty && (text.isEmpty || used.count >= 20), "every picture it shows is one of the end-user pictures (\(used.count))" + (absent.isEmpty ? "" : ", missing: " + absent.joined(separator: ", ")))
     }
 
+    // The notes pad (1.1, 2026-11-27): kept in a plain text file, saved when asked, the folder
+    // made when missing, a failing save told once; the one-key shortcuts off while typing.
+    if t.begin("notes pad") {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ua101panel-notes-\(getpid())", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
+        let url = dir.appendingPathComponent("UA-101 Backups", isDirectory: true).appendingPathComponent(NotesStore.fileName)
+        let a = NotesStore(url: url)
+        t.equal(a.text, "", "no file yet: empty")
+        t.check(!a.hasUnsaved, "nothing to save at first")
+        a.text = "Input 1-2: the desk microphone\nOutput 3-4: the speakers — ünïcode"
+        t.check(a.hasUnsaved, "a change waits to be saved")
+        t.check(a.saveNow() && !a.hasUnsaved && a.lastError == nil, "saved, the folder made")
+        let b = NotesStore(url: url)
+        t.equal(b.text, a.text, "read back the same")
+        var told = 0
+        // A file where the folder should be: every save fails, told once only.
+        let blocked = dir.appendingPathComponent("blocked")
+        FileManager.default.createFile(atPath: blocked.path, contents: Data())
+        let c = NotesStore(url: blocked.appendingPathComponent(NotesStore.fileName))
+        c.onError = { _ in told += 1 }
+        c.text = "x"
+        t.check(!c.saveNow() && c.lastError != nil, "a save that can't be made says so")
+        c.text = "xy"
+        _ = c.saveNow()
+        t.equal(told, 1, "told once, not on every key")
+        t.equal(c.text, "xy", "the words stay in the window")
+        let ui = PanelUI()
+        let w = NotesWindow(store: b, ui: ui)
+        w.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+        t.check(ui.typingNotes, "with the keyboard: the one-key shortcuts are off")
+        b.text += "\nMain: the monitors"
+        w.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
+        t.check(!ui.typingNotes && !b.hasUnsaved, "without it: on again, and the words saved")
+        t.equal(NotesStore(url: url).text, b.text, "saved on leaving the window")
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     // Uninstall UA-101… (2026-11-24): what the app asks the script for, how its
     // answer is read, the grey MIDI rule, and the script itself (its dry runs and refusals only:
     // nothing is removed and no password is asked here).

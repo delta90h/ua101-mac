@@ -43,6 +43,11 @@ final class PanelUI: ObservableObject {
     var nameFrames: [StripID: CGRect] = [:]
     /// Opens the Messages window (the mixer's Messages button, the View menu).
     var showMessages: () -> Void = {}
+    /// Opens the notes pad (View menu, Show Notes).
+    var showNotes: () -> Void = {}
+    /// The notes pad has the keyboard: the Mixer menu's one-key shortcuts are off meanwhile,
+    /// so M, S, C, L, the arrows and the rest type into the notes.
+    @Published var typingNotes = false
     /// Open Patch Bay and Driver Settings: as a sheet or in their own window (View menu).
     var showPatchBay: () -> Void = {}
     var showDriverSettings: () -> Void = {}

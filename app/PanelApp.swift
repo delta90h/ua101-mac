@@ -24,6 +24,9 @@ final class AppCore {
     /// Every note and warning, and the window that shows them.
     let messages: MessageCenter
     let messagesWindow: MessagesWindow
+    /// The notes pad (View menu, Show Notes) and its window.
+    let notes = NotesStore(url: AppCore.backupFolder.appendingPathComponent(NotesStore.fileName))
+    private(set) var notesWindow: NotesWindow!
     /// The pop-up a red message brings, and its window.
     private(set) var popups: MessagePopups!
     private let popupWindow = PopupWindow()
@@ -75,6 +78,15 @@ final class AppCore {
             ui.messagesScale = min(PanelUI.messagesScales.last!, max(PanelUI.messagesScales.first!, CGFloat(k)))
         }
         ui.showMessages = { [unowned self] in self.messagesWindow.show() }
+        notesWindow = NotesWindow(store: notes, ui: ui)
+        ui.showNotes = { [unowned self] in self.notesWindow.show() }
+        notes.onError = { e in
+            AppCore.record(e)
+            let a = NSAlert()
+            a.messageText = "The notes could not be saved"
+            a.informativeText = e + "\n\nThe words are still in the Notes window; the app tries again after the next change."
+            a.runModal()
+        }
         ui.patchBayOwnWindow = PanelUI.ownWindow(PanelUI.patchBayOwnWindowKey, in: .standard)
         ui.driverSettingsOwnWindow = PanelUI.ownWindow(PanelUI.driverSettingsOwnWindowKey, in: .standard)
         ui.showPatchBay = { [unowned self] in self.openPatchBay() }
@@ -342,6 +354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         SizeMemory.keep(AppCore.shared.ui)
+        AppCore.shared.notes.saveNow()
         AppCore.shared.model.finish()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -627,6 +640,11 @@ struct PanelCommands: Commands {
     static let memoriesHeading = "Memories in the UA-101"
     static let backupsHeading = "Backup files on this Mac"
 
+    /// A Mixer menu shortcut with no ⌘: off while the notes pad has the keyboard.
+    private func oneKey(_ key: KeyEquivalent, _ modifiers: EventModifiers) -> KeyboardShortcut? {
+        ui.typingNotes ? nil : KeyboardShortcut(key, modifiers: modifiers)
+    }
+
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About UA-101 Control") {
@@ -667,6 +685,8 @@ struct PanelCommands: Commands {
             Button("Show Messages") { ui.showMessages() }.keyboardShortcut("m", modifiers: [.command, .option])
             Button("Larger Message Text") { ui.stepMessagesScale(up: true) }.keyboardShortcut("=", modifiers: [.command, .option])
             Button("Smaller Message Text") { ui.stepMessagesScale(up: false) }.keyboardShortcut("-", modifiers: [.command, .option])
+            // The notes pad (1.1): what is wired where, kept on this Mac (app/Notes.swift).
+            Button("Show Notes") { ui.showNotes() }.keyboardShortcut("n", modifiers: [.command, .option])
             Divider()
             Toggle("Always on Top", isOn: $ui.alwaysOnTop)
             Toggle("Remember Window Size", isOn: $ui.rememberSize)
@@ -774,40 +794,40 @@ struct PanelCommands: Commands {
         // Roland called it "Panel"; "Mixer" by a design choice (2026-11-20).
         CommandMenu("Mixer") {
             Menu("Select Channel") {
-                Button("Previous Channel") { model.handle(.cursorLeft) }.keyboardShortcut(.leftArrow, modifiers: [])
-                Button("Next Channel") { model.handle(.cursorRight) }.keyboardShortcut(.rightArrow, modifiers: [])
+                Button("Previous Channel") { model.handle(.cursorLeft) }.keyboardShortcut(oneKey(.leftArrow, []))
+                Button("Next Channel") { model.handle(.cursorRight) }.keyboardShortcut(oneKey(.rightArrow, []))
                 Divider()
                 ForEach(ChannelNames.screenOrder, id: \.self) { id in
                     Button(ChannelNames.full(id)) { model.cursor = id }
                 }
             }
             Menu("Mute") {
-                Button("Selected Channel") { model.handle(.toggleMonitor) }.keyboardShortcut("m", modifiers: [])
+                Button("Selected Channel") { model.handle(.toggleMonitor) }.keyboardShortcut(oneKey("m", []))
                 Divider()
                 ForEach(ChannelNames.screenOrder.filter { $0.group != ChannelNames.groupMonitor }, id: \.self) { id in
                     Button(ChannelNames.full(id)) { model.toggleMonitor(id) }
                 }
             }
             Menu("Solo") {
-                Button("Selected Channel") { model.handle(.toggleSolo) }.keyboardShortcut("s", modifiers: [])
+                Button("Selected Channel") { model.handle(.toggleSolo) }.keyboardShortcut(oneKey("s", []))
                 Divider()
                 ForEach(ChannelNames.screenOrder.filter { $0.group != ChannelNames.groupMonitor }, id: \.self) { id in
                     Button(ChannelNames.full(id)) { model.toggleSolo(id) }
                 }
             }
             Menu("Pan") {
-                Button("Pan Left") { model.handle(.panLeft) }.keyboardShortcut(",", modifiers: [])
-                Button("Pan Right") { model.handle(.panRight) }.keyboardShortcut(".", modifiers: [])
-                Button("Centre") { model.handle(.panCenter) }.keyboardShortcut("c", modifiers: [])
+                Button("Pan Left") { model.handle(.panLeft) }.keyboardShortcut(oneKey(",", []))
+                Button("Pan Right") { model.handle(.panRight) }.keyboardShortcut(oneKey(".", []))
+                Button("Centre") { model.handle(.panCenter) }.keyboardShortcut(oneKey("c", []))
             }
             Menu("Volume") {
-                Button("Up 0.5 dB") { model.handle(.volumeUp) }.keyboardShortcut(.upArrow, modifiers: [])
-                Button("Down 0.5 dB") { model.handle(.volumeDown) }.keyboardShortcut(.downArrow, modifiers: [])
-                Button("Up 3 dB") { model.handle(.volumeUpBig) }.keyboardShortcut(.upArrow, modifiers: .shift)
-                Button("Down 3 dB") { model.handle(.volumeDownBig) }.keyboardShortcut(.downArrow, modifiers: .shift)
+                Button("Up 0.5 dB") { model.handle(.volumeUp) }.keyboardShortcut(oneKey(.upArrow, []))
+                Button("Down 0.5 dB") { model.handle(.volumeDown) }.keyboardShortcut(oneKey(.downArrow, []))
+                Button("Up 3 dB") { model.handle(.volumeUpBig) }.keyboardShortcut(oneKey(.upArrow, .shift))
+                Button("Down 3 dB") { model.handle(.volumeDownBig) }.keyboardShortcut(oneKey(.downArrow, .shift))
             }
             Menu("Link") {
-                Button("Selected Channel") { model.handle(.toggleLink) }.keyboardShortcut("l", modifiers: [])
+                Button("Selected Channel") { model.handle(.toggleLink) }.keyboardShortcut(oneKey("l", []))
                 Divider()
                 ForEach([ChannelNames.groupInput, ChannelNames.groupOutput], id: \.self) { g in
                     ForEach(0..<5, id: \.self) { p in
