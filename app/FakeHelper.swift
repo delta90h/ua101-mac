@@ -26,11 +26,19 @@ final class FakeHelper: HelperLink {
     var onAudio: ((Bool) -> Void)?
     var onLevels: ((HelperLevels) -> Void)?
     var onRefused: ((String) -> Void)?
-    var onPasses: ((UInt64, UInt64, UInt64) -> Void)?
+    var onPasses: ((UInt64, UInt64, UInt64, UInt64) -> Void)?
     var onMIDI: ((Bool, Bool) -> Void)?
 
     /// The Load, Store and Reset commands this helper says it passes on (PANEL_PASS_MEM_ bits).
     var passesMemory = FakeHelper.version17Memory
+    /// The memories whose block it reads on request (link version 20). 0: a helper of version
+    /// 19 or older, which reads none (the app then shows no preview).
+    var passesRead = FakeHelper.version20Read
+    static let version20Read = 0x1F * PANEL_PASS_READ_MEMORY_0
+    /// Memory reads passed on, in order: the memory 0 to 4.
+    private(set) var memoryReads: [Int] = []
+    /// For a test: the unit behind gets no memory read (passed on, but no answer comes).
+    var memoryReadsLost = false
     /// As the real helper (src/ua101_link.h): a Load, Store or Reset is passed on only if the
     /// settings were read at most this long before, and none was within the second time.
     static let memoryFreshMicros = UInt64(panel_memory_fresh_seconds()) * 1_000_000
@@ -117,7 +125,7 @@ final class FakeHelper: HelperLink {
             guard let self = self, self.attached else { return }
             // As the real helper: the whole settings block, when it reaches the app, is kept
             // with its time; a switch that moved on the unit makes the one kept an old one.
-            if bytes.count == 268 {
+            if bytes.count == 268, bytes[6] == 0x02, bytes[7] == 0x00 {
                 self.lastBlock = Array(bytes[10..<266])
                 self.blockAt = self.scheduler.now
                 self.events += 1
@@ -167,7 +175,7 @@ final class FakeHelper: HelperLink {
                 // A new connection: what was read before no longer counts (the real helper
                 // forgets it when it opens the unit's interface).
                 self.blockAt = nil
-                self.onPasses?(self.passes, self.passesOn, self.passesMemory)
+                self.onPasses?(self.passes, self.passesOn, self.passesMemory, self.passesRead)
                 self.onAttached?(Int32(PANEL_LINK_OK), self.streaming, false, "")
             }
         }
@@ -175,7 +183,10 @@ final class FakeHelper: HelperLink {
 
     func send(_ bytes: UnsafeBufferPointer<UInt8>) -> Bool {
         guard attached else { return false }
-        let read = panel_is_read_request(bytes.baseAddress, bytes.count) != 0
+        // The settings request, or (link version 20) one of the five memory reads it names.
+        let memoryRead = Int(panel_memory_read_number(bytes.baseAddress, bytes.count))
+        let readsMemory = memoryRead >= 0 && passesRead & (PANEL_PASS_READ_MEMORY_0 << UInt64(memoryRead)) != 0
+        let read = panel_is_read_request(bytes.baseAddress, bytes.count) != 0 || readsMemory
         let allowed = Allowed(passes: passes, passesOn: passesOn)
         let output = Int(panel_patch_message_output(bytes.baseAddress, bytes.count))
         let channel = Int(panel_volume_message_channel(bytes.baseAddress, bytes.count))
@@ -208,6 +219,7 @@ final class FakeHelper: HelperLink {
             sendsNow += 1
             if sendsNow <= Self.sendsPerSecond {
                 passedOn += 1
+                if readsMemory { memoryReads.append(memoryRead) }
                 if !read {
                     changesPassedOn += 1
                     changes.append(Array(bytes))
@@ -221,6 +233,7 @@ final class FakeHelper: HelperLink {
                         changeEvent = events
                     }
                 }
+                if readsMemory, memoryReadsLost { return true }
                 return unit.send(bytes)
             }
             tooMany += 1
@@ -236,7 +249,7 @@ final class FakeHelper: HelperLink {
     func tellPasses() {
         scheduler.soon { [weak self] in
             guard let self = self, self.attached else { return }
-            self.onPasses?(self.passes, self.passesOn, self.passesMemory)
+            self.onPasses?(self.passes, self.passesOn, self.passesMemory, self.passesRead)
         }
     }
 

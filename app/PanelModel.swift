@@ -206,6 +206,9 @@ final class PanelModel: ObservableObject {
     @Published private(set) var changesLocked = false
     @Published private(set) var disagreement: Disagreement?
     @Published private(set) var pendingMemory: PendingMemory?
+    /// Goes up each time a memory's block comes for the preview, or reading it fails, or the
+    /// blocks read are forgotten (PANEL_EV_MEMORY): the dialog then asks `memoryPreview` again.
+    @Published private(set) var previewChanged = 0
     /// One line about the last Recall, Save or Reset: sent, cancelled, ran out.
     @Published private(set) var memoryNote: String?
     /// What the last pause or resume of the unit's saving sent, and what the unit's settings
@@ -401,7 +404,8 @@ final class PanelModel: ObservableObject {
     /// gets a line in the record: only these lines say what left, and when. (The helper can
     /// still refuse it; its own log is the proof of what reached the cable.)
     private func handedOver(_ bytes: UnsafeBufferPointer<UInt8>) {
-        guard !transport.isPretend, panel_is_read_request(bytes.baseAddress, bytes.count) == 0 else { return }
+        guard !transport.isPretend, panel_is_read_request(bytes.baseAddress, bytes.count) == 0,
+              panel_memory_read_number(bytes.baseAddress, bytes.count) < 0 else { return }
         handed.append("  handed to the helper: " + Self.hex(Array(bytes)))
     }
 
@@ -584,6 +588,7 @@ final class PanelModel: ObservableObject {
             for line in lines { record(line) }
         }
         if bits & UInt32(PANEL_EV_DISAGREE) != 0 { readDisagreement() }
+        if bits & UInt32(PANEL_EV_MEMORY) != 0 { previewChanged &+= 1 }
         let fresh = readSnapshot()
         if fresh != snap { snap = fresh }
         checkSaving()
@@ -2672,6 +2677,45 @@ final class PanelModel: ObservableObject {
         patchNote = text
         record("  settings after:  \(Self.hex(after))")
         record("  " + text)
+    }
+
+    // MARK: the memory preview (link version 20)
+
+    /// Why what memory `m` (0 to 4) holds can't be shown now, in plain words; nil if it can be
+    /// read. A read changes nothing on the unit, so changes need not be on.
+    func previewBlocker(_ m: Int) -> String? {
+        guard (0..<5).contains(m) else { return "There is no such memory." }
+        if snap.state != .ready { return "The unit's settings aren't known right now." }
+        if !transport.isPretend, !transport.allowed.memoryRead(m) {
+            return "The driver's helper that is installed is older and doesn't read the memories. The Recall itself still works."
+        }
+        if job != nil { return "A backup, a put back, a reset or a memory command is still running." }
+        return nil
+    }
+
+    /// Asks the unit what memory `m` holds: one read, which changes nothing. Not while a job
+    /// runs or a fader moves; the engine also holds it while a change is on its way.
+    func readMemoryPreview(_ m: Int) {
+        guard previewBlocker(m) == nil, !dragging, keyHoldID == nil else { return }
+        let r = panel_read_memory(engine, UInt32(m), scheduler.now)
+        if r == Int32(PANEL_OK), !transport.isPretend {
+            record("Asked the unit what Memory \(m + 1) holds, for the preview in Recall Memory (a read; it changes nothing).")
+        }
+        afterCall()
+    }
+
+    /// What memory `m` holds against the settings in use, or where reading it stands.
+    func memoryPreview(_ m: Int) -> MemoryPreviewState {
+        if let why = previewBlocker(m) { return .cantShow(why) }
+        var block = [UInt8](repeating: 0, count: 256)
+        if panel_memory_block(engine, UInt32(m), &block) != 0 {
+            return .read(MemoryPreview.make(memory: block, live: unitBlock()))
+        }
+        switch panel_memory_reading(engine, UInt32(m)) {
+        case 1: return .reading
+        case 2: return .cantShow("The unit didn't answer the read. Nothing was changed. The Recall itself still works.")
+        default: return .notRead
+        }
     }
 
     // MARK: Load, Store, Reset: two steps

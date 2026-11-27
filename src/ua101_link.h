@@ -209,6 +209,19 @@
  *      volume_change_passes stay, now at 0x7FFFFF (the parser's number, and the first of the
  *      six digits at most 7). Nothing else changed, and nothing for the plug-in or the MIDI
  *      plug-in but the number.
+ *  20  the five memory reads, for the control app's memory preview (Recall Memory shows what a
+ *      memory holds before it is loaded): the requests for 02 03 00 00 to 02 07 00 00, 256
+ *      bytes each, Memory 1 to 5 (box test 2026-11-27: Memory 1 and 5 confirmed, 2 to 4 by
+ *      their numbering; reading changes nothing). Each is judged twice (the parser, and the
+ *      16 bytes written out in src/ua101_service.c), and no other block is ever passed on:
+ *      02 0D to 02 0F hung the unit's control port until it was switched off and on. A read
+ *      is no change: it doesn't make the settings read before a Load, Store or Reset stale,
+ *      and a memory's block is never taken for the settings in use. ctl_open names the five
+ *      in a fourth number, ctl_passes_read (UA101_CTL_PASS_READ_MEMORY bits); a helper
+ *      before version 20 sends none, and the control app then shows no preview. A control
+ *      app of version 20 that finds a helper of version 19 speaks version 19 to it
+ *      (src/ua101_ctllink.c), with no preview, instead of failing. Nothing changed for the
+ *      plug-in or the MIDI plug-in but the number (2026-11-27).
  * A later version that adds a control adds it to ua101_service_passes and UA101_CTL_PASS_.
  *
  * The plug-in calls the functions below, implemented with XPC in src/plugin/ua101_link_xpc.c,
@@ -223,7 +236,10 @@
 #include "ua101_shared.h"
 
 #define UA101_SERVICE_NAME "io.github.delta90h.ua101d"
-#define UA101_LINK_VERSION 19
+#define UA101_LINK_VERSION 20
+/* The one older version a control app still speaks, to a helper that is not yet updated: with
+   it there is no memory preview (src/ua101_ctllink.c). */
+#define UA101_LINK_VERSION_OLDER_HELPER 19
 
 /* Where the user's two go-ahead files were up to version 17 (see above). No program looks for
    them any more; the control app's report names one that is still there, and
@@ -305,6 +321,12 @@
 #define UA101_CTL_PASS_MEM_RESET(m) (0x10000ull << (m)) /* Reset Memory m+1 */
 #define UA101_CTL_PASS_MEM_RESET_CURRENT 0x1000000ull   /* Reset the settings in use */
 #define UA101_CTL_PASS_MEM_RESET_ALL 0x2000000ull       /* Reset everything */
+#define UA101_LINK_CTL_PASSES_READ "ctl_passes_read" /* uint64, with ctl_open (since version
+                                              20): a bit for each memory whose block this
+                                              helper reads on request: */
+#define UA101_CTL_PASS_READ_MEMORY(m) (1ull << (m)) /* Memory m+1, m 0 to 4 (02 03+m 00 00) */
+/* The memories whose block this helper reads on request, a bit each: all five. */
+#define UA101_MEMORY_READS_PASSED 0x1Fu
 /* The Load, Store and Reset commands this helper passes on, a bit each as above: all 17
    (Load and Store of each memory stand for three messages each, so 37 messages). */
 #define UA101_MEMORY_PASSED 0x31F1F1Full
@@ -340,6 +362,7 @@
      UA101_CTL_PASS_PAN | ((uint64_t)UA101_PANS_PASSED * 0x10000000000ull) | UA101_CTL_PASS_ON | \
      UA101_CTL_PASS_LINK | UA101_CTL_PASS_SOLO | UA101_CTL_PASS_MEMORY)
 #define UA101_CTL_PASSES_MEMORY ((uint64_t)UA101_MEMORY_PASSED)
+#define UA101_CTL_PASSES_READ ((uint64_t)UA101_MEMORY_READS_PASSED)
 /* The MIDI client's. UA101_LINK_DATA is then plain MIDI bytes, any number of messages or
    parts of one. */
 #define UA101_LINK_TIME "time" /* uint64, with the event "midi": the Mac's clock

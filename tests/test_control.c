@@ -400,8 +400,10 @@ static void test_block_requests(void)
         EXPECT(ua101_ctl_block_request(b, msg));
         EXPECT(ua101_ctl_is_request_only(msg, sizeof(msg)));
         EXPECT(msg[5] == 0x11 && msg[6] == 0x02 && msg[7] == b);
-        /* The helper still passes on block 0 only. */
+        /* Block 0 is the settings request; 3 to 7 are the five memory reads, and no other. */
         EXPECT(ua101_ctl_is_read_request(msg, sizeof(msg)) == (b == 0));
+        EXPECT(ua101_ctl_memory_read_request(msg, sizeof(msg)) ==
+               (b >= 3 && b <= 7 ? (int)b - 3 : -1));
     }
     memset(msg, 0xAA, sizeof(msg));
     EXPECT(!ua101_ctl_block_request(UA101_CTL_BLOCKS, msg));
@@ -425,11 +427,72 @@ static void test_block_requests(void)
     EXPECT(!ua101_ctl_block_reply(&view, &block));
 }
 
+/* The five memory reads (link version 20): exactly those bytes, nothing near them. */
+static void test_memory_requests(void)
+{
+    /* Written out here, from docs/control-protocol.md: 02 03 00 00 to 02 07 00 00, size
+       00 00 02 00, checksums 79 to 75. */
+    static const uint8_t k_reads[5][UA101_CTL_READ_REQUEST_BYTES] = {
+        {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x03, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x79, 0xF7},
+        {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x78, 0xF7},
+        {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x05, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x77, 0xF7},
+        {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x76, 0xF7},
+        {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x07, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x75, 0xF7}};
+    uint8_t msg[UA101_CTL_READ_REQUEST_BYTES], reply[UA101_CTL_BLOCK_MESSAGE_BYTES];
+    ua101_ctl_view view;
+    unsigned m, i, b;
+
+    for (m = 0; m < 5; m++) {
+        EXPECT(ua101_ctl_memory_request(m, msg) && memcmp(msg, k_reads[m], sizeof(msg)) == 0);
+        EXPECT(ua101_ctl_memory_read_request(k_reads[m], sizeof(msg)) == (int)m);
+        EXPECT(!ua101_ctl_is_read_request(k_reads[m], sizeof(msg)));
+        EXPECT(ua101_ctl_memory_read_request(k_reads[m], sizeof(msg) - 1) == -1);
+        /* Any one byte changed, to anything: no longer a memory read (another memory's request
+           differs in two bytes, the block and the checksum). */
+        for (i = 0; i < sizeof(msg); i++) {
+            for (b = 0; b < 256; b++) {
+                if (b == k_reads[m][i])
+                    continue;
+                memcpy(msg, k_reads[m], sizeof(msg));
+                msg[i] = (uint8_t)b;
+                EXPECT(ua101_ctl_memory_read_request(msg, sizeof(msg)) == -1);
+            }
+        }
+    }
+    memset(msg, 0xAA, sizeof(msg));
+    EXPECT(!ua101_ctl_memory_request(5, msg) && !ua101_ctl_memory_request(0xFFFFFFFFu, msg));
+    EXPECT(msg[0] == 0xAA && msg[15] == 0xAA);
+    ua101_ctl_read_request(msg);
+    EXPECT(ua101_ctl_memory_read_request(msg, sizeof(msg)) == -1);
+    EXPECT(ua101_ctl_memory_read_request(NULL, sizeof(msg)) == -1);
+    for (b = 0; b < UA101_CTL_BLOCKS; b++) {
+        EXPECT(ua101_ctl_block_request(b, msg));
+        EXPECT((ua101_ctl_memory_read_request(msg, sizeof(msg)) >= 0) == (b >= 3 && b <= 7));
+    }
+
+    /* A reply from each block: only 02 03 to 02 07 is a memory, 0 to 4. */
+    memcpy(reply, (const uint8_t[]){0xF0, 0x41, 0x10, 0x00, 0x69, 0x12, 0x02, 0x00, 0x00, 0x00}, 10);
+    memset(reply + 10, 0, UA101_CTL_BLOCK_BYTES);
+    reply[sizeof(reply) - 1] = 0xF7;
+    for (b = 0; b < UA101_CTL_BLOCKS + 1; b++) {
+        reply[7] = (uint8_t)b;
+        reply[sizeof(reply) - 2] = ua101_ctl_checksum(reply + 6, 4 + UA101_CTL_BLOCK_BYTES);
+        EXPECT(ua101_ctl_classify(reply, sizeof(reply), &view) ==
+               (b == 0 ? UA101_CTL_SETTINGS : UA101_CTL_OTHER));
+        EXPECT(ua101_ctl_memory_reply(&view) == (b >= 3 && b <= 7 ? (int)b - 3 : -1));
+    }
+    /* A short reply from 02 03 is no memory. */
+    reply[7] = 3;
+    view.data_len = UA101_CTL_BLOCK_BYTES - 1;
+    EXPECT(ua101_ctl_memory_reply(&view) == -1);
+}
+
 int main(void)
 {
     test_checksum();
     test_read_request();
     test_block_requests();
+    test_memory_requests();
     test_request_guard();
     test_settings_parse();
     test_values();

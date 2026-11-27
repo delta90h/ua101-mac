@@ -52,6 +52,23 @@ int ua101_ctl_block_reply(const ua101_ctl_view *view, unsigned *block)
     return 1;
 }
 
+int ua101_ctl_memory_reply(const ua101_ctl_view *view)
+{
+    unsigned block;
+
+    if (!ua101_ctl_block_reply(view, &block) || block < UA101_CTL_MEMORY_BLOCK_FIRST ||
+        block >= UA101_CTL_MEMORY_BLOCK_FIRST + 5)
+        return -1;
+    return (int)(block - UA101_CTL_MEMORY_BLOCK_FIRST);
+}
+
+int ua101_ctl_memory_request(unsigned memory, uint8_t out[UA101_CTL_READ_REQUEST_BYTES])
+{
+    if (memory >= 5)
+        return 0;
+    return ua101_ctl_block_request(UA101_CTL_MEMORY_BLOCK_FIRST + memory, out);
+}
+
 int ua101_ctl_is_request_only(const uint8_t *msg, size_t len)
 {
     /* The header, 4 address bytes, 4 size bytes, the checksum and F7. */
@@ -70,6 +87,21 @@ int ua101_ctl_is_read_request(const uint8_t *msg, size_t len)
         return 0;
     ua101_ctl_read_request(want);
     return memcmp(msg, want, sizeof(want)) == 0 && ua101_ctl_is_request_only(msg, len);
+}
+
+int ua101_ctl_memory_read_request(const uint8_t *msg, size_t len)
+{
+    uint8_t want[UA101_CTL_READ_REQUEST_BYTES];
+    unsigned memory;
+
+    if (msg == NULL || len != sizeof(want) || !ua101_ctl_is_request_only(msg, len))
+        return -1;
+    for (memory = 0; memory < 5; memory++) {
+        (void)ua101_ctl_memory_request(memory, want);
+        if (memcmp(msg, want, sizeof(want)) == 0)
+            return (int)memory;
+    }
+    return -1;
 }
 
 size_t ua101_ctl_pack_sysex(const uint8_t *msg, size_t len, uint8_t cable, uint8_t *out,

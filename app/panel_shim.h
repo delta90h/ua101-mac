@@ -11,7 +11,8 @@
  * channels it names (all five pairs and every channel since link version 13),
  * and since link version 14 the stereo link of the pairs and the solo of the
  * groups it names (every pair; INPUT and OUTPUT); and since link version 17
- * the Load, Store and Reset commands it names; nothing else. (Up to link
+ * the Load, Store and Reset commands it names, and since link version 20 the
+ * five memory reads it names; nothing else. (Up to link
  * version 17 the changes also needed the user's go-ahead files; since
  * version 18 there are none.)
  */
@@ -37,7 +38,8 @@ enum {
     PANEL_ERR_BUSY,
     PANEL_ERR_TICKET
 };
-enum { PANEL_EV_STATE = 1, PANEL_EV_SETTINGS = 2, PANEL_EV_SETTLING = 4, PANEL_EV_DISAGREE = 8 };
+enum { PANEL_EV_STATE = 1, PANEL_EV_SETTINGS = 2, PANEL_EV_SETTLING = 4, PANEL_EV_DISAGREE = 8,
+       PANEL_EV_MEMORY = 16 /* a memory's block came, or reading it failed (the preview) */ };
 enum { PANEL_F_VOLUME = 0, PANEL_F_PAN, PANEL_F_ON, PANEL_F_LINK, PANEL_F_SOLO, PANEL_F_PATCH };
 enum { PANEL_MEM_RESET_ALL = 0, PANEL_MEM_RESET_MEMORY, PANEL_MEM_STORE, PANEL_MEM_LOAD,
        PANEL_MEM_RESET_CURRENT /* the settings in use, no memory: Roland's "Current Setting" */ };
@@ -99,6 +101,10 @@ enum {
 uint64_t panel_helper_passes(void);
 uint64_t panel_helper_passes_on(void);
 uint64_t panel_helper_passes_memory(void);
+/* Since link version 20: the memories whose block a helper reads on request, in its fourth
+ * number (ctl_passes_read): this bit shifted left by the memory 0 to 4. */
+#define PANEL_PASS_READ_MEMORY_0 1ull
+uint64_t panel_helper_passes_read(void);
 unsigned panel_helper_link_version(void);
 /* Where the user's two go-ahead files were up to link version 17. Nothing looks for them
  * any more (version 18); the report names one that is still there. */
@@ -303,6 +309,23 @@ int panel_factory_monitor_on(const panel_engine *e, unsigned group, unsigned cha
  * message the way to the real unit lets through in this version. */
 int panel_is_read_request(const uint8_t *msg, size_t len);
 
+/* THE MEMORY PREVIEW (link version 20): what one of the unit's five memories holds, read
+ * from the unit; nothing is changed on it. panel_read_memory asks for memory 0 to 4 (the read
+ * goes out when nothing else is on its way, never during a drag or while changes wait);
+ * PANEL_EV_MEMORY says when its block came or the tries ran out. panel_memory_block copies
+ * the block and returns 1 once it has come, 0 before (and after a Load, Store or Reset was
+ * sent, or the unit went away). panel_memory_reading: 1 while a read is wanted or on its way,
+ * 2 if the last got no answer, else 0. */
+int panel_read_memory(panel_engine *e, unsigned memory, uint64_t now);
+int panel_memory_block(const panel_engine *e, unsigned memory, uint8_t out[256]);
+int panel_memory_reading(const panel_engine *e, unsigned memory);
+uint64_t panel_memory_reads_sent(const panel_engine *e);
+/* The request for memory 0 to 4, 16 bytes, for the record; all 0 for another number. */
+void panel_memory_read_message(unsigned memory, uint8_t out[16]);
+/* The memory, 0 to 4, if this is exactly one of the five memory reads, byte for byte; -1 for
+ * anything else (the settings request too). */
+int panel_memory_read_number(const uint8_t *msg, size_t len);
+
 /* ---- the pretend unit ---- */
 panel_sim *panel_sim_new(void);
 void panel_sim_free(panel_sim *s);
@@ -329,6 +352,7 @@ int panel_sim_digital(const panel_sim *s);
 int panel_sim_rate_code(const panel_sim *s);
 int panel_sim_saving_paused(const panel_sim *s);
 uint64_t panel_sim_reads(const panel_sim *s);
+uint64_t panel_sim_memory_reads(const panel_sim *s);
 uint64_t panel_sim_sets_applied(const panel_sim *s);
 uint64_t panel_sim_saves(const panel_sim *s);
 uint64_t panel_sim_memory_commands(const panel_sim *s);

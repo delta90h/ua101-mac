@@ -568,6 +568,7 @@ struct MemoryDialogView: View {
                     check("Direct monitor mixer (mute, pan, volume, link)", on: mixer) { mixer.toggle() }
                 }
             }
+            if purpose == .load { preview }
             // What a Recall, Save or Reset did is in the Messages window (2026-11-16), so the
             // buttons below never move.
             HStack {
@@ -582,6 +583,66 @@ struct MemoryDialogView: View {
                     .disabled(!ready || !command.isValid)
             }
         }
+        // Recall Memory reads the chosen memory from the unit (a read; it changes nothing),
+        // when the dialog opens, when another memory is picked, and when the unit is read again.
+        .onAppear { if purpose == .load { model.readMemoryPreview(memory) } }
+        .onChange(of: memory) { _, m in if purpose == .load { model.readMemoryPreview(m) } }
+        .onChange(of: model.snap.state == .ready) { _, ready in
+            if purpose == .load, ready, model.memoryPreview(memory) == .notRead { model.readMemoryPreview(memory) }
+        }
+    }
+
+    /// How many changes the preview lists before "and N more", and the box's fixed height:
+    /// the dialog is as high whatever the state (2026-11-16), so its buttons never move.
+    static let previewLines = 5
+    static let previewHeight: CGFloat = 138
+
+    // Recall Memory: what the chosen memory holds, as what a Recall would change (1.1).
+    @ViewBuilder private var preview: some View {
+        let _ = model.previewChanged
+        let state = model.memoryPreview(memory)
+        VStack(alignment: .leading, spacing: 5) {
+            Text("WHAT MEMORY \(memory + 1) WOULD CHANGE").font(.panel(9, .bold)).foregroundColor(theme.dim).copyable()
+            switch state {
+            case .notRead, .reading:
+                Text("Reading Memory \(memory + 1) from the unit…").font(.panel(11)).foregroundColor(theme.dim).copyable()
+            case .cantShow(let why):
+                Text("Can't show what Memory \(memory + 1) holds. " + why)
+                    .font(.panel(11)).foregroundColor(theme.dim).fixedSize(horizontal: false, vertical: true).copyable()
+            case .read(let p):
+                let changes = p.changes(patchBay: patchBay, mixer: mixer)
+                if !patchBay && !mixer {
+                    Text("Nothing is chosen to load.").font(.panel(11)).foregroundColor(theme.dim).copyable()
+                } else if changes.isEmpty {
+                    Text("Nothing: what you chose to load is the same in Memory \(memory + 1) as in the settings in use.")
+                        .font(.panel(11)).foregroundColor(theme.dim).fixedSize(horizontal: false, vertical: true).copyable()
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(changes.prefix(Self.previewLines).enumerated()), id: \.offset) { _, c in
+                            HStack(spacing: 6) {
+                                Text(c.what).font(.panel(11, .semibold)).foregroundColor(theme.text)
+                                    .frame(width: 190, alignment: .leading)
+                                Text(c.from).font(.readout(11)).foregroundColor(theme.dim)
+                                Text("→").font(.panel(11)).foregroundColor(theme.dim)
+                                Text(c.to).font(.readout(11, .bold)).foregroundColor(theme.text)
+                            }.copyable()
+                        }
+                        if changes.count > Self.previewLines {
+                            Text("and \(changes.count - Self.previewLines) more").font(.panel(11)).foregroundColor(theme.dim).copyable()
+                        }
+                    }
+                }
+                let left = p.changes(patchBay: !patchBay, mixer: !mixer).count
+                if left > 0 {
+                    Text("\(left) more difference\(left == 1 ? "" : "s") in the part\(patchBay || mixer ? "" : "s") not chosen; \(left == 1 ? "it stays" : "they stay") as now.")
+                        .font(.panel(10)).foregroundColor(theme.dim).fixedSize(horizontal: false, vertical: true).copyable()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: Self.previewHeight, maxHeight: Self.previewHeight, alignment: .topLeading)
+        .clipped()
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(theme.track.opacity(0.5)))
     }
 
     // Step 2: confirm. One click sends the one message shown.

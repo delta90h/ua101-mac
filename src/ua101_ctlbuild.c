@@ -41,6 +41,8 @@ size_t ua101_ctlmsg_build(const ua101_msg *m, uint8_t out[UA101_CTLMSG_MAX_BYTES
     case UA101_MSG_READ_BLOCK:
         ua101_ctl_read_request(out);
         return UA101_CTL_READ_REQUEST_BYTES;
+    case UA101_MSG_READ_MEMORY:
+        return ua101_ctl_memory_request(m->memory, out) ? UA101_CTL_READ_REQUEST_BYTES : 0;
     case UA101_MSG_FIELD:
         if (!ua101_field_value_ok(m->field, m->value))
             return 0;

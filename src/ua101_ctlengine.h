@@ -7,7 +7,7 @@
  *
  * Rules it enforces (docs/control-protocol.md, and the user's standing rules):
  *  - It starts read-only. Until ua101_eng_allow_writes(), only the request for
- *    the settings block can leave it.
+ *    the settings block, and on request the five memory reads, can leave it.
  *  - Load, Store, Reset and the preset command need ua101_eng_allow_memory()
  *    AND two steps for each command: prepare, then confirm with the ticket.
  *  - One last check sits on the way out (the guard): every message is read
@@ -53,6 +53,7 @@ typedef enum {
 #define UA101_EV_SETTINGS 0x02u /* the picture the windows show changed */
 #define UA101_EV_SETTLING 0x04u /* a switch moved; a fresh read follows */
 #define UA101_EV_DISAGREE 0x08u /* the unit holds another value than was sent */
+#define UA101_EV_MEMORY 0x10u   /* a memory's block came, or reading it failed (memory preview) */
 
 typedef struct {
     /* Carries one SysEx message towards the unit. Returns 1 if taken. */
@@ -124,8 +125,19 @@ typedef struct {
 
     unsigned events;
 
+    /* The memory preview (link version 20): what the five memories hold, read on request.
+     * mem_wanted is the memory asked for plus 1 (0: none); it goes out when nothing else is
+     * on its way (no change waiting or unchecked, no drag, no switch settling, no settings read
+     * out) and is then mem_waiting until its block comes or the tries run out. */
+    uint8_t memory[UA101_MEMORIES][UA101_CTL_BLOCK_BYTES];
+    uint8_t memory_known;  /* a bit per memory: its block came since the last invalidation */
+    uint8_t memory_failed; /* a bit per memory: the last read of it got no answer */
+    unsigned mem_wanted, mem_waiting, mem_tries;
+    uint64_t mem_deadline;
+
     /* Counters, for the windows and the tests. */
     uint64_t reads_sent, sets_sent, memory_sent;
+    uint64_t memory_reads_sent, memory_blocks_received;
     uint64_t blocks_received; /* settings blocks taken from the unit */
     uint64_t guard_blocks;   /* messages the guard stopped: should stay 0 */
     uint64_t send_failures;
@@ -217,6 +229,18 @@ ua101_eng_result ua101_eng_memory_prepare(ua101_engine *e, const ua101_msg *m, u
                                           uint32_t *ticket);
 ua101_eng_result ua101_eng_memory_confirm(ua101_engine *e, uint32_t ticket, uint64_t now);
 void ua101_eng_memory_cancel(ua101_engine *e);
+
+/* The memory preview: ask for what memory 0 to 4 holds. Nothing is changed on the unit. The
+ * read goes out as soon as nothing else is on its way (never during a drag or while changes
+ * wait or are being checked); UA101_EV_MEMORY says when its block came or the tries ran out.
+ * ERR_NOT_READY before the settings are known, ERR_VALUE for another number. A second ask
+ * replaces one that hasn't gone out yet. */
+ua101_eng_result ua101_eng_read_memory(ua101_engine *e, unsigned memory, uint64_t now);
+/* The block of that memory as it came: NULL until it has come (or after a Load, Store or Reset
+ * was sent, or the unit went away: what was read may be out of date). */
+const uint8_t *ua101_eng_memory_block(const ua101_engine *e, unsigned memory);
+/* 1 while a read of that memory is wanted or on its way; 2 if the last one got no answer. */
+int ua101_eng_memory_reading(const ua101_engine *e, unsigned memory);
 
 /* Before quitting: sends what is waiting and resumes the unit's saving. */
 void ua101_eng_finish(ua101_engine *e, uint64_t now);

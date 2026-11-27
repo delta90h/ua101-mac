@@ -1651,6 +1651,37 @@ int ua101_service_memory_passes(const uint8_t *msg, size_t len, const ua101_serv
     return 1;
 }
 
+/* The five memory reads this version passes on (link version 20, for the app's memory
+   preview): Memory 1 to 5 at 02 03 00 00 to 02 07 00 00, 256 bytes each, written out here
+   from docs/control-protocol.md because the helper holds no code that builds a message;
+   tests/test_ctlhelper.c checks them against the app's builder. Reading changes nothing on the
+   unit (box test, 2026-11-27). The other blocks are never asked for: 02 0D to 02 0F hung the
+   unit's control port until it was switched off and on. */
+static const uint8_t k_memory_reads[UA101_MEMORIES][UA101_CTL_READ_REQUEST_BYTES] = {
+    {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x03, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x79, 0xF7},
+    {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x78, 0xF7},
+    {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x05, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x77, 0xF7},
+    {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x76, 0xF7},
+    {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11, 0x02, 0x07, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x75, 0xF7}};
+
+/* The memory, 0 to 4, if this is one of the five reads by both checks and the memory is in
+   UA101_MEMORY_READS_PASSED; -1 for anything else. */
+static int memory_read_passes(const uint8_t *msg, size_t len)
+{
+    ua101_msg m;
+    unsigned i;
+
+    if (msg == NULL || len != UA101_CTL_READ_REQUEST_BYTES ||
+        ua101_ctlmsg_parse(msg, len, &m) != UA101_MSG_READ_MEMORY || m.memory >= UA101_MEMORIES)
+        return -1;
+    for (i = 0; i < UA101_MEMORIES; i++)
+        if (memcmp(msg, k_memory_reads[i], len) == 0)
+            break;
+    if (i != m.memory || (UA101_MEMORY_READS_PASSED & (1u << i)) == 0)
+        return -1;
+    return (int)i;
+}
+
 int ua101_service_passes(const uint8_t *msg, size_t len, const char **why)
 {
     static const char *unused;
@@ -1663,7 +1694,13 @@ int ua101_service_passes(const uint8_t *msg, size_t len, const char **why)
     *why = "";
     switch (risk) {
     case UA101_RISK_READ:
-        return 1;
+        /* The settings request, or one of the five memory reads (link version 20), judged
+           twice: the parser's verdict, and the bytes themselves against the list below. */
+        if (ua101_ctl_is_read_request(msg, len) || memory_read_passes(msg, len) >= 0)
+            return 1;
+        *why = "of the requests this helper passes on only the settings and the five memories "
+               "(02 00 and 02 03 to 02 07); the message was not sent";
+        return 0;
     case UA101_RISK_SETTING:
         /* Two checks that don't share code: the parser's verdict and the bytes themselves. */
         volume = 0;
@@ -1704,7 +1741,11 @@ int ua101_service_passes(const uint8_t *msg, size_t len, const char **why)
                "not sent";
         return 0;
     default:
-        *why = "not a message this helper knows; it was not sent";
+        /* A request for another block (02 0D to 02 0F hung the unit's control port). */
+        *why = msg != NULL && ua101_ctl_is_request_only(msg, len)
+                   ? "of the requests this helper passes on only the settings and the five "
+                     "memories (02 00 and 02 03 to 02 07); the message was not sent"
+                   : "not a message this helper knows; it was not sent";
         return 0;
     }
 }
@@ -1861,7 +1902,15 @@ static int64_t send_to_unit(const uint8_t *msg, size_t len, char *why, size_t wh
         hex[3 * i - 1] = '\0';
         say("passed on to the unit: %s (%s)", what, hex);
     } else {
+        int read_of = memory_read_passes(msg, len);
+
         S.counts.ctl_sent++;
+        /* A memory read is rare (a click in Recall Memory) and goes in the log: what was
+           asked of the unit is the user's record, even when it changes nothing. */
+        if (read_of >= 0) {
+            S.counts.ctl_memory_reads++;
+            say("passed on to the unit: a read of Memory %d (changes nothing)", read_of + 1);
+        }
     }
     return UA101_LINK_OK;
 }
@@ -2089,6 +2138,7 @@ static void say_passes(xpc_object_t reply)
     xpc_dictionary_set_uint64(reply, UA101_LINK_CTL_PASSES, UA101_CTL_PASSES);
     xpc_dictionary_set_uint64(reply, UA101_LINK_CTL_PASSES_ON, UA101_CTL_PASSES_ON);
     xpc_dictionary_set_uint64(reply, UA101_LINK_CTL_PASSES_MEMORY, UA101_CTL_PASSES_MEMORY);
+    xpc_dictionary_set_uint64(reply, UA101_LINK_CTL_PASSES_READ, UA101_CTL_PASSES_READ);
 }
 
 static void handle_request(peer *p, xpc_object_t msg)

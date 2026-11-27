@@ -135,6 +135,8 @@ A request like the settings read, at `02 <b> 00 00` with size `00 00 02 00`, get
 
 Reading the blocks changed nothing: the settings in use read the same before and after, every time.
 
+Since link version 20 the helper passes on the reads of `02 03` to `02 07` (the five memories) as well as `02 00`, byte for byte as `ua101_ctl_memory_request` builds them, and refuses every other block, `02 0D` to `02 0F` above all. The app uses them for the list in Recall Memory of what a memory would change; a helper of version 19 or older passes none, and the app then shows no list.
+
 ## Not safe to try
 
 Messages nothing shows to be safe: requests at `02 0D 00 00` to `02 0F 00 00` (they stop the control port, above) and `01 00 00 00`; sets at `00 00 00 01`, `00 01 00 00`, and the one-message patch bay presets at `00 00 00 08`.

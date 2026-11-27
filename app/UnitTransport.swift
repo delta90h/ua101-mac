@@ -41,6 +41,9 @@ struct Allowed: Equatable {
     /// (since link version 17), a bit each (PANEL_PASS_MEM_): Load and Store of each
     /// memory, Reset of each memory, of the settings in use, and of everything.
     var memory: UInt64 = 0
+    /// The memories, 0 to 4, whose block may be read for the preview in Recall Memory (since
+    /// link version 20). A read changes nothing, so it goes whether or not changes are on.
+    var memoryReads: Set<Int> = []
 
     /// A pair's number in the helper's list.
     static func pairNumber(group: Int, pair: Int) -> Int {
@@ -66,7 +69,10 @@ struct Allowed: Equatable {
     /// read when `passes` has PANEL_PASS_ON).
     /// `passesMemory`: its third number, the Recall, Save and Reset commands it passes on
     /// (only read when `passes` has PANEL_PASS_MEMORY).
-    init(passes: UInt64, passesOn: UInt64 = 0, passesMemory: UInt64 = 0) {
+    /// `passesRead`: its fourth number, the memories it reads on request (link version 20; an
+    /// older helper sends none, and then there is no preview).
+    init(passes: UInt64, passesOn: UInt64 = 0, passesMemory: UInt64 = 0, passesRead: UInt64 = 0) {
+        for m in 0..<5 where passesRead & (PANEL_PASS_READ_MEMORY_0 << UInt64(m)) != 0 { memoryReads.insert(m) }
         saving = passes & UInt64(PANEL_PASS_SAVING) != 0
         if passes & UInt64(PANEL_PASS_MEMORY) != 0 { memory = passesMemory }
         if passes & UInt64(PANEL_PASS_ON) != 0 {
@@ -116,6 +122,8 @@ struct Allowed: Equatable {
     }
     /// One Recall, Save or Reset command, by its bit (PANEL_PASS_MEM_).
     func memory(_ bit: UInt64) -> Bool { everything || (bit != 0 && memory & bit == bit) }
+    /// Memory m's block can be read, for the preview.
+    func memoryRead(_ m: Int) -> Bool { everything || memoryReads.contains(m) }
     /// Some Recall, Save or Reset command is passed on at all.
     var someMemory: Bool { everything || memory != 0 }
     func volume(_ s: StripID) -> Bool { everything || volumes.contains(s) }
@@ -363,8 +371,9 @@ protocol HelperLink: AnyObject {
     /// Which changes the helper passes on. Comes before each attach that succeeded. The
     /// first value: the PANEL_PASS_ bits; the second: the channels whose on/off it passes on,
     /// and since link version 14 the linked pairs and the solo groups (higher bits); the
-    /// third: the Recall, Save and Reset commands (PANEL_PASS_MEM_ bits).
-    var onPasses: ((UInt64, UInt64, UInt64) -> Void)? { get set }
+    /// third: the Recall, Save and Reset commands (PANEL_PASS_MEM_ bits); the fourth, since
+    /// link version 20: the memories whose block it reads (PANEL_PASS_READ_MEMORY_0 bits).
+    var onPasses: ((UInt64, UInt64, UInt64, UInt64) -> Void)? { get set }
     /// While attached (link version 15): MIDI passed the unit's MIDI IN (first) or MIDI OUT
     /// (second) socket just now. At most 10 a second, only while MIDI passes.
     var onMIDI: ((Bool, Bool) -> Void)? { get set }
@@ -383,7 +392,7 @@ final class XPCHelperLink: HelperLink {
     var onAudio: ((Bool) -> Void)?
     var onLevels: ((HelperLevels) -> Void)?
     var onRefused: ((String) -> Void)?
-    var onPasses: ((UInt64, UInt64, UInt64) -> Void)?
+    var onPasses: ((UInt64, UInt64, UInt64, UInt64) -> Void)?
     var onMIDI: ((Bool, Bool) -> Void)?
 
     private var link: OpaquePointer?
@@ -418,8 +427,8 @@ final class XPCHelperLink: HelperLink {
                     playback: XPCHelperLink.list(l.playback, l.playback_channels)))
             },
             refused: { ctx, _, why in XPCHelperLink.me(ctx)?.onRefused?(why.map { String(cString: $0) } ?? "") },
-            passes: { ctx, passes, passesOn, passesMemory in
-                XPCHelperLink.me(ctx)?.onPasses?(passes, passesOn, passesMemory)
+            passes: { ctx, passes, passesOn, passesMemory, passesRead in
+                XPCHelperLink.me(ctx)?.onPasses?(passes, passesOn, passesMemory, passesRead)
             },
             midi: { ctx, i, o in XPCHelperLink.me(ctx)?.onMIDI?(i != 0, o != 0) })
         link = ua101_ctllink_open(DispatchQueue.main, &events, Unmanaged.passUnretained(self).toOpaque())
@@ -436,7 +445,8 @@ final class XPCHelperLink: HelperLink {
     func detach() { if let link = link { ua101_ctllink_detach(link) } }
 }
 
-/// The real UA-101, through the helper. `send` hands on the request for the settings, and,
+/// The real UA-101, through the helper. `send` hands on the request for the settings, the
+/// memory reads the helper named (link version 20, for the preview in Recall Memory), and,
 /// while the model has switched changes on, the messages for the changes the helper said it
 /// passes on (`allowed`): the two that pause and resume the unit's saving, the patch bay
 /// source of the output pairs it named, the volume of the channels it named (a value
@@ -455,8 +465,9 @@ final class HelperTransport: UnitTransport {
     private(set) var passes: UInt64 = 0
     private(set) var passesOn: UInt64 = 0
     private(set) var passesMemory: UInt64 = 0
+    private(set) var passesRead: UInt64 = 0
     /// What the helper passes on, as it said itself.
-    var allowed: Allowed { Allowed(passes: passes, passesOn: passesOn, passesMemory: passesMemory) }
+    var allowed: Allowed { Allowed(passes: passes, passesOn: passesOn, passesMemory: passesMemory, passesRead: passesRead) }
     var soundPlaying: Bool { streaming }
     var onMessage: (([UInt8]) -> Void)?
     var onLink: ((Bool, String?) -> Void)?
@@ -518,11 +529,12 @@ final class HelperTransport: UnitTransport {
             self.changesOn = false
             self.onRefused?(why)
         }
-        link.onPasses = { [weak self] passes, passesOn, passesMemory in
+        link.onPasses = { [weak self] passes, passesOn, passesMemory, passesRead in
             guard let self = self else { return }
             self.passes = passes
             self.passesOn = passesOn
             self.passesMemory = passesMemory
+            self.passesRead = passesRead
         }
     }
 
@@ -546,7 +558,11 @@ final class HelperTransport: UnitTransport {
     func send(_ bytes: UnsafeBufferPointer<UInt8>) -> Bool {
         guard up else { return false }
         if panel_is_read_request(bytes.baseAddress, bytes.count) != 0 { return link.send(bytes) }
-        if changesOn {
+        // One of the five memory reads (the preview), only for a memory the helper named. It
+        // changes nothing, so changes need not be on.
+        let memory = Int(panel_memory_read_number(bytes.baseAddress, bytes.count))
+        if memory >= 0 { if allowed.memoryReads.contains(memory) { return link.send(bytes) } }
+        else if changesOn {
             let allowed = self.allowed
             if allowed.saving, panel_is_saving_message(bytes.baseAddress, bytes.count) != 0 { return link.send(bytes) }
             let output = Int(panel_patch_message_output(bytes.baseAddress, bytes.count))

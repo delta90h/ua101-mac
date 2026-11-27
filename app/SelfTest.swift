@@ -1073,6 +1073,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
 
         let g = Bench()
         g.fake.passes = FakeHelper.version6
+        g.fake.passesRead = 0 // and, as every helper before link version 20, no memory reads
         var lines: [String] = []
         g.model.onRecord = { lines.append($0) }
         g.chooseReal()
@@ -1224,6 +1225,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
 
         let g = Bench()
         g.fake.passes = FakeHelper.version9 // a helper of link version 9 or 10: no on/off
+        g.fake.passesRead = 0 // and, as every helper before link version 20, no memory reads
         var lines: [String] = []
         g.model.onRecord = { lines.append($0) }
         g.fake.unit.press(Int32(PANEL_SWITCH_SOFT), in: true)
@@ -1684,6 +1686,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
 
         let g = Bench()
         g.fake.passes = FakeHelper.version11 // a helper of link version 11 or 12: INPUT 1 only
+        g.fake.passesRead = 0 // and, as every helper before link version 20, no memory reads
         g.fake.passesOn = FakeHelper.version11On
         var lines: [String] = []
         g.model.onRecord = { lines.append($0) }
@@ -1825,6 +1828,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         var lines: [String] = []
         g.model.onRecord = { lines.append($0) }
         g.fake.passes = FakeHelper.version13 // a helper of link version 13: no link, no solo
+        g.fake.passesRead = 0 // and, as every helper before link version 20, no memory reads
         g.fake.passesOn = FakeHelper.version13On
         g.fake.unit.press(Int32(PANEL_SWITCH_SOFT), in: true)
         g.chooseReal()
@@ -2035,12 +2039,13 @@ func runSelfTest(verbose: Bool) -> Int32 {
         // told. Link version 17 (2026-11-21) adds Recall, Save and Reset, in a third number; what
         // it says about the ordinary changes is version 14's, unchanged. Link version 18 (the
         // same day) names the same lists and asks for no go-ahead file any more. Link version 19
-        // (2026-11-27) passes a volume up to the top of the range, with the same lists.
-        t.check(panel_helper_link_version() == 19 && FakeHelper.version17 == panel_helper_passes() && FakeHelper.version14On == panel_helper_passes_on()
-                    && FakeHelper.version17Memory == panel_helper_passes_memory()
+        // (2026-11-27) passes a volume up to the top of the range, with the same lists. Link
+        // version 20 (the same day) adds the five memory reads, in a fourth number.
+        t.check(panel_helper_link_version() == 20 && FakeHelper.version17 == panel_helper_passes() && FakeHelper.version14On == panel_helper_passes_on()
+                    && FakeHelper.version17Memory == panel_helper_passes_memory() && FakeHelper.version20Read == panel_helper_passes_read()
                     && FakeHelper.version17 == FakeHelper.version14 | UInt64(PANEL_PASS_MEMORY),
-                "the stand-in helper names what the real helper of this build (link version 18) names: version 14's two numbers and the memory commands")
-        let v14 = Allowed(passes: FakeHelper.version17, passesOn: FakeHelper.version14On, passesMemory: FakeHelper.version17Memory)
+                "the stand-in helper names what the real helper of this build (link version 20) names: version 14's two numbers, the memory commands and the memory reads")
+        let v14 = Allowed(passes: FakeHelper.version17, passesOn: FakeHelper.version14On, passesMemory: FakeHelper.version17Memory, passesRead: FakeHelper.version20Read)
         t.check(v14.links == Set(0..<11) && v14.solos == [1, 2] && v14.link(group: mon, pair: 0) && v14.link(group: out, pair: 4)
                     && v14.solo(group: inp) && v14.solo(group: out) && !v14.solo(group: mon) && v14.mixer,
                 "version 14's answer: every pair's link and the solo of INPUT and OUTPUT (MONITOR OUT has none)")
@@ -4294,6 +4299,122 @@ func runSelfTest(verbose: Bool) -> Int32 {
                         && note(b).contains("Open Backup") && warned(b) && !b.model.jobRunning,
                     "a unit that ignores a change on the way back: a warning that names the bytes: \(note(b))")
         }
+    }
+
+    // ---- 16e
+    if t.begin("the memory preview in Recall Memory (link version 20)") {
+        func simBlock(_ u: PretendUnit) -> [UInt8] {
+            var block = [UInt8](repeating: 0, count: 256)
+            panel_sim_block(u.sim, &block)
+            return block
+        }
+        /// The unit's settings in use with INPUT 1 at -6 dB, and (`muted`) INPUT 1 muted too:
+        /// the two test mixes the owner left in Memory 1 and Memory 5 (2026-11-26).
+        func mix(_ u: PretendUnit, muted: Bool) -> [UInt8] {
+            var b = simBlock(u)
+            let at = PanelModel.volumeOffset(strip(inp, 0))
+            b.replaceSubrange(at..<at + 6, with: PanelModel.volumeDigits(minus6))
+            if muted { let on = PanelModel.onPlace(strip(inp, 0)); b[on.byte] |= UInt8(1 << on.bit) }
+            return b
+        }
+        func held(_ m: PanelModel, _ memory: Int) -> MemoryPreview? {
+            if case .read(let p) = m.memoryPreview(memory) { return p }
+            return nil
+        }
+        func setMemories(_ u: PretendUnit) {
+            panel_sim_set_memory(u.sim, 0, mix(u, muted: false))
+            panel_sim_set_memory(u.sim, 1, simBlock(u))
+            panel_sim_set_memory(u.sim, 4, mix(u, muted: true))
+        }
+        let volume1 = PutBackPlan.Change(what: "INPUT 1 volume", from: Format.dB(unity) + " dB", to: Format.dB(minus6) + " dB")
+        let mute1 = PutBackPlan.Change(what: "INPUT 1 mute", from: "off", to: "on")
+
+        // The pretend unit: read-only, as the app starts.
+        let b = Bench()
+        setMemories(b.unit)
+        let before = b.model.snap
+        let tick = b.model.previewChanged
+        t.equal(b.model.memoryPreview(0), .notRead, "nothing read before it is asked for")
+        b.model.readMemoryPreview(0)
+        b.settle()
+        t.check(held(b.model, 0)?.changes(patchBay: true, mixer: true) == [volume1], "Memory 1: INPUT 1 volume, 0 dB now, -6 dB in the memory, and nothing else")
+        t.check(held(b.model, 0)?.changes(patchBay: true, mixer: false) == [], "and nothing in the patch bay")
+        t.check(b.model.previewChanged > tick, "the dialog is told")
+        t.equal(panel_sim_memory_reads(b.unit.sim), 1, "one memory read reached the unit")
+        t.check(b.model.snap == before && panel_sim_sets_applied(b.unit.sim) == 0 && panel_sim_memory_commands(b.unit.sim) == 0,
+                "the settings in use didn't change, in the app or on the unit; nothing else was sent")
+        b.model.readMemoryPreview(4)
+        b.settle()
+        t.check(held(b.model, 4)?.mixer == [volume1, mute1], "Memory 5: INPUT 1 at -6 dB and muted")
+        b.model.readMemoryPreview(1)
+        b.settle()
+        t.check(held(b.model, 1) == MemoryPreview(), "Memory 2 holds the settings in use: nothing would change")
+        t.check(b.model.previewBlocker(5) != nil && b.model.memoryPreview(5) != .notRead, "there is no Memory 6")
+
+        // Never while a fader is held; asked again after, it goes.
+        let reads = panel_sim_memory_reads(b.unit.sim)
+        b.openUp()
+        b.model.beginDrag()
+        b.model.readMemoryPreview(2)
+        b.settle()
+        t.equal(panel_sim_memory_reads(b.unit.sim), reads, "no read while a fader is held")
+        b.model.endDrag()
+        b.settle()
+        b.model.readMemoryPreview(2)
+        b.settle()
+        t.equal(panel_sim_memory_reads(b.unit.sim), reads + 1, "after it, the read goes")
+
+        // Never while a job runs; a Recall forgets what was read.
+        b.model.prepareMemory(MemoryCommand(kind: .load, memory: 0, patchBay: true, mixer: true))
+        b.model.confirmMemory()
+        t.check(b.model.jobRunning, "a Recall under way")
+        b.model.readMemoryPreview(4)
+        t.check(b.model.memoryPreview(4) != .reading && b.model.previewBlocker(4) != nil, "the preview waits while a job runs: \(b.model.previewBlocker(4) ?? "nil")")
+        b.settle(4_000_000)
+        t.check(!b.model.jobRunning && panel_sim_memory_reads(b.unit.sim) == reads + 1, "no memory read meanwhile")
+        t.equal(b.model.memoryPreview(4), .notRead, "after the Recall, what was read is forgotten")
+        b.model.readMemoryPreview(0)
+        b.settle()
+        t.check(held(b.model, 0) == MemoryPreview(), "read again: Memory 1 is now what is in use")
+
+        // The UA-101 behind the stand-in helper, changes off.
+        let g = Bench()
+        setMemories(g.fake.unit)
+        g.chooseReal()
+        t.check(FakeHelper.version20Read == panel_helper_passes_read() && g.helper.allowed.memoryReads == Set(0..<5),
+                "the helper names the five memories; the app knows them")
+        let passed = g.fake.passedOn
+        g.model.readMemoryPreview(0)
+        g.settle()
+        t.check(held(g.model, 0)?.changes(patchBay: true, mixer: true) == [volume1] && g.fake.memoryReads == [0] && g.fake.passedOn == passed + 1 && g.fake.refused == 0,
+                "through the helper with changes off: one read, passed on, and the preview")
+        t.check(g.fake.changesPassedOn == 0 && panel_sim_sets_applied(g.fake.unit.sim) == 0 && !g.model.snap.writesAllowed, "nothing changed on the unit")
+        var request = [UInt8](repeating: 0, count: 16)
+        panel_memory_read_message(0, &request)
+        t.equal(Format.hex(request), "F0 41 10 00 69 11 02 03 00 00 00 00 02 00 79 F7", "the read of Memory 1, byte for byte")
+
+        // An older helper (link version 19): no preview, said plainly; the Recall still works.
+        g.fake.passesRead = 0
+        g.fake.tellPasses()
+        g.settle()
+        let old = g.model.memoryPreview(4)
+        t.check(old == .cantShow(g.model.previewBlocker(4) ?? "") && g.model.previewBlocker(4)?.contains("older") == true, "an older helper: can't show it, and why")
+        g.model.readMemoryPreview(4)
+        g.settle()
+        let stopped = request.withUnsafeBufferPointer { g.helper.send($0) }
+        t.check(g.fake.memoryReads == [0] && !stopped, "nothing asked of an older helper; the transport itself stops the read")
+        g.fake.passesRead = FakeHelper.version20Read
+        g.fake.tellPasses()
+        g.settle()
+
+        // No answer: tried again, then "can't show it".
+        g.fake.memoryReadsLost = true
+        g.model.readMemoryPreview(3)
+        g.settle(10_000_000)
+        if case .cantShow(let why) = g.model.memoryPreview(3) {
+            t.check(why.contains("didn't answer"), "a memory that never answers: can't show it: \(why)")
+        } else { t.check(false, "a memory that never answers: \(g.model.memoryPreview(3))") }
+        t.check(g.model.snap.state == .ready, "and the unit is still read")
     }
 
     // ---- 17

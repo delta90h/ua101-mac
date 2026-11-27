@@ -17,7 +17,7 @@
  * For the control app it also holds the unit's MIDI interface (src/ua101_midiport.h) while such
  * an app is attached, passes on what the unit says on the control cable, and gives levels from
  * the audio it streams (src/ua101_link.h, version 15). It passes on to the unit: the request
- * for the settings, always; and "pause saving", "resume saving", the patch bay source of an
+ * for the settings, always, and since version 20 the five memory reads; and "pause saving", "resume saving", the patch bay source of an
  * output pair, of the mixer's channels the volume up to 0 dB, the pan and the on/off, of its
  * pairs the stereo link, and of the INPUT and the OUTPUT group the solo, each only as the
  * messages and within the values tried on the unit; and since version 17 Load, Store and
@@ -132,6 +132,9 @@ long long ua101_service_trim_log(int fd, long long limit, long long keep);
  * the solo of a group in UA101_SOLOS_PASSED, set to 0 (none) or to a channel 1 to
  * UA101_SOLO_PASSED_MAX, each byte for byte as one of the messages written out in
  * src/ua101_service.c.
+ * Since link version 20: the five memory reads, the requests for 02 03 00 00 to 02 07 00 00
+ * (Memory 1 to 5), each byte for byte as written out in src/ua101_service.c. Every other
+ * request: never (02 0D to 02 0F hung the unit's control port).
  * Every other message that sets something, and everything unknown: never. A Load, Store or
  * Reset: never by this function; they are judged by ua101_service_memory_passes below, which
  * needs to know the moment. `why` gets the reason for a refusal.
@@ -167,7 +170,8 @@ int ua101_service_memory_passes(const uint8_t *msg, size_t len, const ua101_serv
 
 /* What the control side did, for the tests and the log. */
 typedef struct {
-    uint64_t ctl_sent;     /* settings requests passed on to the unit */
+    uint64_t ctl_sent;     /* settings requests passed on to the unit, memory reads too */
+    uint64_t ctl_memory_reads; /* of those: the five memory reads (link version 20) */
     uint64_t ctl_changes;  /* messages that change the unit passed on (saving, patch bay, volume, pan, on/off) */
     uint64_t ctl_memory;   /* of those: Load, Store and Reset commands (link version 17) */
     uint64_t ctl_refused;  /* messages not passed on: anything else, or too many */

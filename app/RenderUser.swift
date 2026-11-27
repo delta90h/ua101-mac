@@ -150,7 +150,8 @@ func renderUserWindows(into directory: String) -> [String] {
     shot("18-save-memory-confirm", .dark, MemoryDialogView(model: keep.model, purpose: .store, memory: 4, messages: keep.messages))
     keep.model.cancelMemory()
 
-    // 19. Recall Memory, the first step.
+    // 19. Recall Memory, the first step, with what Memory 3 would change (1.1).
+    keep.memoryToShow(2, real: true)
     shot("19-recall-memory-choose", .dark, MemoryDialogView(model: keep.model, purpose: .load, memory: 2, messages: keep.messages))
 
     // 20. SOFT CTRL out: the unit ignores the mixer.

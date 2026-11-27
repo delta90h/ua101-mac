@@ -1,5 +1,5 @@
 /*
- * The control app's end of the link to the helper (src/ua101_link.h, version 18): attach to the
+ * The control app's end of the link to the helper (src/ua101_link.h, version 20): attach to the
  * unit's control messages, hand one SysEx message towards the unit, ask for levels, and hear
  * when MIDI passes the unit's MIDI sockets (for the app's MIDI lamps).
  *
@@ -51,8 +51,11 @@ typedef struct {
     /* Told before every `attached` that succeeded: which changes this helper passes on
        (UA101_CTL_PASS_ bits in src/ua101_link.h; with UA101_CTL_PASS_ON, the channels whose
        on/off it passes on are in `passes_on`, UA101_CTL_PASS_ON_CHANNEL bits; the Load, Store
-       and Reset commands in `passes_memory`, UA101_CTL_PASS_MEM_ bits). */
-    void (*passes)(void *context, uint64_t passes, uint64_t passes_on, uint64_t passes_memory);
+       and Reset commands in `passes_memory`, UA101_CTL_PASS_MEM_ bits; since link version 20
+       the memories whose block it reads on request in `passes_read`,
+       UA101_CTL_PASS_READ_MEMORY bits, 0 from an older helper). */
+    void (*passes)(void *context, uint64_t passes, uint64_t passes_on, uint64_t passes_memory,
+                   uint64_t passes_read);
     /* While attached: MIDI arrived at the unit's MIDI IN socket (`in`), or left through its
        MIDI OUT socket (`out`), just now. At most 10 a second, and only while MIDI passes. */
     void (*midi)(void *context, int in, int out);
@@ -64,6 +67,10 @@ typedef struct ua101_ctllink ua101_ctllink;
 ua101_ctllink *ua101_ctllink_open(dispatch_queue_t queue, const ua101_ctllink_events *events,
                                   void *context);
 void ua101_ctllink_attach(ua101_ctllink *l);
+/* The link version the helper answered to at the last attach: UA101_LINK_VERSION, or
+   UA101_LINK_VERSION_OLDER_HELPER for a helper not yet updated (it is then spoken to in its
+   own version, and reads no memory). 0 before the first answer. */
+unsigned ua101_ctllink_version(const ua101_ctllink *l);
 /* Returns 1 if the message was handed to the helper (which may still refuse it). */
 int ua101_ctllink_send(ua101_ctllink *l, const uint8_t *msg, size_t len);
 void ua101_ctllink_ask_levels(ua101_ctllink *l);

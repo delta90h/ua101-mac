@@ -78,6 +78,8 @@ typedef enum {
     UA101_MSG_STORE,        /* memory 0 to 4; sections[i] is 0 or 1 here */
     UA101_MSG_LOAD,         /* memory 0 to 4; sections[i] is 0 or 1 */
     UA101_MSG_PRESET,       /* value 4: Hard Thru, 3: Initial Setting */
+    UA101_MSG_READ_MEMORY,  /* memory 0 to 4: send what that memory holds (link version 20);
+                               changes nothing, like the settings request */
     UA101_MSG_UNKNOWN       /* well-formed, but not one of the above */
 } ua101_msg_kind;
 
@@ -102,7 +104,7 @@ ua101_msg_kind ua101_ctlmsg_parse(const uint8_t *bytes, size_t len, ua101_msg *o
 
 /* How much harm a message could do if it were sent to the unit. */
 typedef enum {
-    UA101_RISK_READ = 0, /* asks for the settings; changes nothing */
+    UA101_RISK_READ = 0, /* asks for the settings or one of the five memories; changes nothing */
     UA101_RISK_SETTING,  /* changes one current setting, or pauses saving */
     UA101_RISK_MEMORY,   /* replaces settings or overwrites stored memories */
     UA101_RISK_NEVER     /* unknown, malformed, or listed under "commands to avoid" */

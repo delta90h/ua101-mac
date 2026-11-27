@@ -257,6 +257,7 @@ static struct {
     _Atomic int wire_link;      /* of those, a passed pair's stereo link, 0 or 1 */
     _Atomic int wire_solo;      /* of those, a passed group's solo, 0 to 10 */
     _Atomic int wire_memory;    /* of those, one of the 37 Load, Store and Reset messages */
+    _Atomic int wire_memory_reads; /* of those, one of the five memory reads (link version 20) */
     _Atomic int wire_other;     /* packets on a cable the unit doesn't have (neither the control
                                    cable nor the MIDI sockets'), or that made no sense */
     /* What reached the MIDI OUT socket (cable 0), as MIDI bytes in order. */
@@ -638,6 +639,9 @@ static void hand_memory(uint8_t out[16], unsigned a2, unsigned a3, const uint8_t
      Reset: 13 bytes, one byte 00, at 00 00 00 03 (the settings in use), 00 00 <03 to 07> 03
             (Memory 1 to 5), or 00 00 00 02 (everything). */
 #define T_MEMORY_MESSAGES 37
+/* The memory reads test_memory_reads sends through the engine (link version 20): each of the
+   five once, and Memory 1 once more. */
+#define T_MEMORY_READS 6
 static int is_passed_memory(const uint8_t *msg, size_t len)
 {
     unsigned sum, i;
@@ -779,6 +783,8 @@ int ua101_midiport_send(ua101_midiport *p, const uint8_t *packets, size_t bytes)
                 atomic_fetch_add(&P.wire_solo, 1);
             else if (is_passed_memory(msg, len))
                 atomic_fetch_add(&P.wire_memory, 1);
+            else if (ua101_ctl_memory_read_request(msg, len) >= 0)
+                atomic_fetch_add(&P.wire_memory_reads, 1);
             ua101_sim_receive(&P.sim, msg, len);
         }
     }
@@ -837,6 +843,7 @@ typedef struct {
     _Atomic int passes_events;           /* what the helper says it passes on, with each attach */
     _Atomic uint64_t passes, passes_on;
     _Atomic uint64_t memory_passes;      /* the Load, Store and Reset commands the helper names */
+    _Atomic uint64_t read_passes;        /* the memories it reads on request (link version 20) */
     _Atomic int lamp_events, lamp_in, lamp_out; /* "midi_lamps", and how many said in, out */
     ua101_ctl_levels levels; /* on the app's queue */
     char why[256];
@@ -903,10 +910,12 @@ static void app_refused(void *ctx, int status, const char *why)
     atomic_fetch_add(&a->refused, 1);
 }
 
-static void app_passes(void *ctx, uint64_t passes, uint64_t passes_on, uint64_t passes_memory)
+static void app_passes(void *ctx, uint64_t passes, uint64_t passes_on, uint64_t passes_memory,
+                       uint64_t passes_read)
 {
     app *a = ctx;
 
+    atomic_store(&a->read_passes, passes_read);
     atomic_store(&a->passes, passes);
     atomic_store(&a->passes_on, passes_on);
     atomic_store(&a->memory_passes, passes_memory);
@@ -1135,6 +1144,109 @@ static void test_no_unit(app *a)
     CHECK(attach(a) == UA101_LINK_ERR_ABSENT && atomic_load(&a->last_watching) == 0,
           "another program holds the MIDI interface: absent, and no event will come for that");
     atomic_store(&P.can_open, 1);
+}
+
+static void helper_clock_forward(double seconds);
+static int log_lines_with(const char *a, const char *b);
+static int send_raw(app *a, const uint8_t *msg, size_t len);
+
+/* The memory preview (link version 20): the app's engine reads each of the five memories
+   through the helper; each read reaches the cable, byte for byte one of the five, and its
+   block comes back to the engine as that memory's, never as the settings in use. No other
+   block is passed on, 02 0D to 02 0F above all (they hung the real unit's control port).
+   A memory's block is no fresh read of the settings for a Load, Store or Reset. */
+static void test_memory_reads(app *a)
+{
+    int wire = atomic_load(&P.wire_messages), reads = atomic_load(&P.wire_memory_reads);
+    int refused = atomic_load(&a->refused);
+    uint64_t changes = counts().ctl_changes, sent = counts().ctl_sent;
+    static uint8_t settings_bytes[256], before_bytes[256];
+    uint8_t *settings = settings_bytes, *before = before_bytes;
+    unsigned mem, b, ok = 0;
+
+    CHECK(atomic_load(&a->read_passes) == UA101_CTL_PASSES_READ,
+          "with the attach the helper named the five memories it reads (%llx)",
+          (unsigned long long)atomic_load(&a->read_passes));
+    on_app(^{
+      panel_unit_block(a->engine, before);
+    });
+    on_service_queue(^{
+      unsigned m;
+
+      for (m = 0; m < UA101_MEMORIES; m++)
+          P.sim.memory[m][0x80] = (uint8_t)(m + 1); /* INPUT 1's volume, other in each */
+    });
+    for (mem = 0; mem < UA101_MEMORIES; mem++) {
+        static uint8_t got_bytes[256], held_bytes[256];
+        uint8_t *got = got_bytes, *held = held_bytes;
+        __block int has = 0;
+        unsigned m = mem;
+
+        CHECK(APP(panel_read_memory(a->engine, m, now_us())) == PANEL_OK, "Memory %u is asked for", m + 1);
+        CHECK(WAIT(APP(panel_memory_reading(a->engine, m)) == 0, 3.0), "and its block came");
+        on_app(^{
+          has = panel_memory_block(a->engine, m, got);
+        });
+        on_service_queue(^{
+          memcpy(held, P.sim.memory[m], 256);
+        });
+        ok += has && memcmp(got, held, 256) == 0 && got[0x80] == m + 1;
+    }
+    CHECK(ok == UA101_MEMORIES, "each of the five came back as the unit holds it (%u)", ok);
+    CHECK(atomic_load(&P.wire_memory_reads) == reads + UA101_MEMORIES &&
+              atomic_load(&P.wire_messages) == wire + UA101_MEMORIES,
+          "five messages reached the cable, the five memory reads");
+    CHECK(counts().ctl_memory_reads == UA101_MEMORIES && counts().ctl_sent == sent + UA101_MEMORIES &&
+              counts().ctl_changes == changes,
+          "the helper counted them as requests, not as changes");
+    on_app(^{
+      panel_unit_block(a->engine, settings);
+    });
+    CHECK(memcmp(settings, before, 256) == 0 && APP(panel_volume(a->engine, 1, 0)) == PANEL_UNITY_VOLUME,
+          "the settings in use are as before: no memory was taken for them");
+    CHECK(log_lines_with("a read of Memory 3", "changes nothing") == 1,
+          "the helper's log has each read, in words");
+
+    /* Every other block, handed straight to the link: refused, nothing on the cable. */
+    wire = atomic_load(&P.wire_messages);
+    for (b = 1; b < UA101_CTL_BLOCKS; b++) {
+        uint8_t req[UA101_CTL_READ_REQUEST_BYTES];
+
+        if (b >= 3 && b <= 7)
+            continue;
+        ua101_ctl_block_request(b, req);
+        CHECK(send_raw(a, req, sizeof(req)) == 1, "block 02 %02X is handed over", b);
+    }
+    CHECK(WAIT(atomic_load(&a->refused) == refused + 10, 3.0),
+          "the helper refused all ten: 02 01, 02 02 and 02 08 to 02 0F (%d)",
+          atomic_load(&a->refused) - refused);
+    CHECK(strstr(refused_why(a), "02 03 to 02 07") != NULL, "saying why: %s", refused_why(a));
+    usleep(100000);
+    CHECK(atomic_load(&P.wire_messages) == wire, "and nothing of them reached the cable");
+
+    /* A memory's block is no fresh read: with the settings read 40 s ago, a memory read just
+       now leaves a Load refused by its own rule. */
+    helper_clock_forward(40);
+    CHECK(APP(panel_read_memory(a->engine, 0, now_us())) == PANEL_OK &&
+              WAIT(APP(panel_memory_reading(a->engine, 0)) == 0 && APP(panel_memory_block(a->engine, 0, settings)), 3.0),
+          "Memory 1 is read once more");
+    {
+        ua101_msg m;
+        uint8_t load[UA101_CTLMSG_MAX_BYTES];
+        size_t len;
+        int memory_wire = atomic_load(&P.wire_memory);
+
+        memset(&m, 0, sizeof(m));
+        m.kind = UA101_MSG_LOAD;
+        m.memory = 0;
+        m.sections[3] = 1;
+        len = ua101_ctlmsg_build(&m, load);
+        refused = atomic_load(&a->refused);
+        CHECK(send_raw(a, load, len) == 1 && WAIT(atomic_load(&a->refused) == refused + 1, 3.0),
+              "a Load of Memory 1 right after it is refused");
+        CHECK(strstr(refused_why(a), "weren't read") != NULL && atomic_load(&P.wire_memory) == memory_wire,
+              "as the settings weren't read lately: %s", refused_why(a));
+    }
 }
 
 /* The first read: the app's engine gets the settings through the helper. One message went down
@@ -1557,6 +1669,53 @@ static void test_rules(void)
     CHECK(ua101_service_passes(bytes, UA101_CTL_READ_REQUEST_BYTES, &why) &&
               ua101_service_passes(bytes, UA101_CTL_READ_REQUEST_BYTES, NULL),
           "the settings request passes");
+    /* Link version 20: the five memory reads, as the app's builder makes them, pass; no other
+       block does, and no read one byte away from them. */
+    {
+        unsigned b, i, near = 0, near_passed = 0;
+        uint8_t req[UA101_CTL_READ_REQUEST_BYTES];
+
+        for (b = 0; b < UA101_CTL_BLOCKS; b++) {
+            ua101_ctl_block_request(b, req);
+            why = NULL;
+            CHECK(ua101_service_passes(req, sizeof(req), &why) == (b == 0 || (b >= 3 && b <= 7)),
+                  "the request for block 02 %02X %s", b,
+                  b == 0 || (b >= 3 && b <= 7) ? "passes" : "never passes");
+            if (b == 1 || b == 2 || b >= 8)
+                CHECK(why != NULL && strstr(why, "02 03 to 02 07") != NULL, "and says why: %s",
+                      why != NULL ? why : "(nothing)");
+        }
+        for (b = 0; b < UA101_MEMORIES; b++) {
+            memset(&m, 0, sizeof(m));
+            m.kind = UA101_MSG_READ_MEMORY;
+            m.memory = (uint8_t)b;
+            len = ua101_ctlmsg_build(&m, bytes);
+            CHECK(len == UA101_CTL_READ_REQUEST_BYTES && ua101_service_passes(bytes, len, &why),
+                  "Memory %u's read, as the app builds it, passes", b + 1);
+            CHECK(!ua101_service_passes(bytes, len - 1, &why), "cut short it doesn't");
+            for (i = 0; i < len; i++) {
+                unsigned v;
+
+                for (v = 0; v < 256; v += 1) {
+                    if (v == bytes[i])
+                        continue;
+                    memcpy(req, bytes, len);
+                    req[i] = (uint8_t)v;
+                    near++;
+                    /* A changed byte that makes another memory's read or the settings request,
+                       with its checksum, can't happen with one byte; so none passes. */
+                    near_passed += (unsigned)ua101_service_passes(req, len, &why);
+                }
+            }
+        }
+        CHECK(near == 5 * 16 * 255 && near_passed == 0,
+              "of %u reads one byte away from the five, %u pass", near, near_passed);
+        CHECK(UA101_CTL_PASSES_READ == 0x1Full && panel_helper_passes_read() == 0x1Full &&
+                  UA101_CTL_PASS_READ_MEMORY(4) == 0x10ull,
+              "the helper names the five memories it reads, a bit each");
+        CHECK(UA101_LINK_VERSION == 20 && UA101_LINK_VERSION_OLDER_HELPER == 19,
+              "link version 20, and the app still speaks 19 to an older helper");
+    }
     CHECK(ua101_service_passes(pause, 13, &why) && ua101_service_passes(resume, 13, &why),
           "\"pause saving\" and \"resume saving\" both pass");
     CHECK(!ua101_service_passes(pause, 12, &why) && !ua101_service_passes(NULL, 13, &why),
@@ -4310,6 +4469,90 @@ static void test_no_helper(void)
     xpc_release(deaf);
 }
 
+/* A helper one version older (19, before the memory preview): the app's link asks again in
+   version 19, is attached, reads no memory, and every later request carries 19. Any older
+   helper stays an error. The helpers here are stand-ins that answer by the version alone. */
+static void test_older_helper(void)
+{
+    unsigned kind;
+
+    for (kind = 0; kind < 2; kind++) {
+        const uint64_t speaks = kind == 0 ? UA101_LINK_VERSION_OLDER_HELPER : 18;
+        xpc_connection_t old = xpc_connection_create(NULL, NULL);
+        __block _Atomic int asked20 = 0, asked_older = 0, asked_other = 0, sends_older = 0;
+        xpc_endpoint_t ep;
+        uint8_t request[UA101_CTL_READ_REQUEST_BYTES];
+        app *a;
+
+        xpc_connection_set_event_handler(old, ^(xpc_object_t peer) {
+          if (xpc_get_type(peer) != XPC_TYPE_CONNECTION)
+              return;
+          xpc_connection_set_event_handler((xpc_connection_t)peer, ^(xpc_object_t m) {
+            xpc_object_t reply;
+            uint64_t v;
+            const char *op;
+
+            if (xpc_get_type(m) != XPC_TYPE_DICTIONARY || (reply = xpc_dictionary_create_reply(m)) == NULL)
+                return;
+            v = xpc_dictionary_get_uint64(m, UA101_LINK_KEY_VERSION);
+            op = xpc_dictionary_get_string(m, UA101_LINK_OP);
+            if (v == UA101_LINK_VERSION)
+                atomic_fetch_add(&asked20, 1);
+            else if (v == speaks)
+                atomic_fetch_add(&asked_older, 1);
+            else
+                atomic_fetch_add(&asked_other, 1);
+            if (v != speaks) {
+                xpc_dictionary_set_int64(reply, UA101_LINK_STATUS, UA101_LINK_ERR_VERSION);
+                xpc_dictionary_set_string(reply, UA101_LINK_WHY, "different builds");
+            } else {
+                xpc_dictionary_set_int64(reply, UA101_LINK_STATUS, UA101_LINK_OK);
+                xpc_dictionary_set_bool(reply, UA101_LINK_PRESENT, true);
+                xpc_dictionary_set_uint64(reply, UA101_LINK_CTL_PASSES, UA101_CTL_PASS_SAVING);
+                /* Never sent by a real helper of 19; the app mustn't believe it from one. */
+                xpc_dictionary_set_uint64(reply, UA101_LINK_CTL_PASSES_READ, 0x1F);
+                if (op != NULL && strcmp(op, "ctl_send") == 0)
+                    atomic_fetch_add(&sends_older, 1);
+            }
+            xpc_connection_send_message((xpc_connection_t)peer, reply);
+            xpc_release(reply);
+          });
+          xpc_connection_resume((xpc_connection_t)peer);
+        });
+        xpc_connection_resume(old);
+        ep = xpc_endpoint_create(old);
+        ua101_ctllink_use_endpoint(ep);
+        a = app_new(0);
+        if (kind == 0) {
+            CHECK(attach(a) == UA101_LINK_OK, "a helper of link version 19 is attached to (%d: %s)",
+                  atomic_load(&a->last_status), app_why(a));
+            CHECK(atomic_load(&asked20) == 1 && atomic_load(&asked_older) == 1 && atomic_load(&asked_other) == 0,
+                  "asked once in version 20, then once in 19 (%d, %d)", atomic_load(&asked20),
+                  atomic_load(&asked_older));
+            CHECK(APP(ua101_ctllink_version(a->link)) == UA101_LINK_VERSION_OLDER_HELPER,
+                  "the link says it speaks 19");
+            CHECK(atomic_load(&a->passes) == UA101_CTL_PASS_SAVING && atomic_load(&a->read_passes) == 0,
+                  "what that helper passes on is taken, and no memory read: no preview");
+            ua101_ctl_read_request(request);
+            CHECK(send_raw(a, request, sizeof(request)) == 1 && WAIT(atomic_load(&sends_older) == 1, 3.0),
+                  "a request afterwards goes in version 19 too");
+            CHECK(attach(a) == UA101_LINK_OK && atomic_load(&asked20) == 2,
+                  "each attach tries 20 first, in case the helper was updated");
+        } else {
+            CHECK(attach(a) == UA101_LINK_ERR_VERSION, "a helper of link version 18 is an error (%d)",
+                  atomic_load(&a->last_status));
+            CHECK(atomic_load(&asked20) == 1 && atomic_load(&asked_other) == 1 && atomic_load(&asked_older) == 0,
+                  "after one try in 20 and one in 19, no more (%d, %d)", atomic_load(&asked20),
+                  atomic_load(&asked_other));
+        }
+        app_free(a);
+        ua101_ctllink_use_endpoint(g_endpoint);
+        xpc_release(ep);
+        xpc_connection_cancel(old);
+        xpc_release(old);
+    }
+}
+
 /* Closing with things in flight: no event arrives afterwards (the address checker watches). */
 static void test_close_in_flight(void)
 {
@@ -5883,6 +6126,7 @@ int main(void)
     test_no_unit(a);
     test_read(a);
     test_switch(a);
+    test_memory_reads(a);
     test_helper_refuses(a);
     test_saving(a);
     test_patch(a);
@@ -5903,19 +6147,21 @@ int main(void)
     CHECK(atomic_load(&P.wire_messages) ==
                   atomic_load(&P.wire_reads) + atomic_load(&P.wire_saving) + atomic_load(&P.wire_patch) +
                       atomic_load(&P.wire_volume) + atomic_load(&P.wire_pan) + atomic_load(&P.wire_on) +
-                      atomic_load(&P.wire_link) + atomic_load(&P.wire_solo) + atomic_load(&P.wire_memory) &&
+                      atomic_load(&P.wire_link) + atomic_load(&P.wire_solo) + atomic_load(&P.wire_memory) +
+                      atomic_load(&P.wire_memory_reads) &&
+              atomic_load(&P.wire_memory_reads) == T_MEMORY_READS &&
               atomic_load(&P.wire_saving) == 14 && atomic_load(&P.wire_patch) == 14 &&
               atomic_load(&P.wire_other) == 0,
           "in the whole run, every message on the cable was the settings request (%d) or "
           "a pause or resume of saving (%d), a patch bay source (%d), a passed "
           "channel's volume at a value that is at most the top of the range (%d), a passed channel's pan from "
           "0x0000 to 0x8000 (%d), a passed channel's on/off, 0 or 1 (%d), a passed pair's link, "
-          "0 or 1 (%d), a passed group's solo, 0 to 10 (%d), or one of the "
-          "37 Load, Store and Reset messages (%d), of %d",
+          "0 or 1 (%d), a passed group's solo, 0 to 10 (%d), one of the "
+          "37 Load, Store and Reset messages (%d), or one of the five memory reads (%d), of %d",
           atomic_load(&P.wire_reads), atomic_load(&P.wire_saving), atomic_load(&P.wire_patch),
           atomic_load(&P.wire_volume), atomic_load(&P.wire_pan), atomic_load(&P.wire_on),
           atomic_load(&P.wire_link), atomic_load(&P.wire_solo), atomic_load(&P.wire_memory),
-          atomic_load(&P.wire_messages));
+          atomic_load(&P.wire_memory_reads), atomic_load(&P.wire_messages));
     {
         __block uint64_t touched;
 
@@ -5935,6 +6181,7 @@ int main(void)
     }
     app_free(a);
     test_no_helper();
+    test_older_helper();
     test_close_in_flight();
 
     ua101_service_shutdown();

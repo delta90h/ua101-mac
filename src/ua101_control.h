@@ -32,9 +32,11 @@ uint8_t ua101_ctl_checksum(const uint8_t *bytes, size_t count);
 void ua101_ctl_read_request(uint8_t out[UA101_CTL_READ_REQUEST_BYTES]);
 /* For the developer's read-only test of the unit's other blocks (ua101settings --all-blocks,
    2026-11-27): the request for block 02 <block> 00 00, 256 bytes. Block 0 is the settings in
-   use; on the sister UA-1000, 03 to 07 seem to be the five memories. Returns 0, and writes
-   nothing, for a block above 0x0F. The helper passes none of these but block 0 on
-   (ua101_ctl_is_read_request below). */
+   use, 03 to 07 the five memories (confirmed for 03 and 07 on the box, 2026-11-27). Returns 0,
+   and writes nothing, for a block above 0x0F. The helper passes on block 0
+   (ua101_ctl_is_read_request below) and, since link version 20, blocks 03 to 07
+   (ua101_ctl_memory_read_request below), and none of the others: 0D to 0F hung the unit's
+   control port until it was switched off and on. */
 #define UA101_CTL_BLOCKS 16
 int ua101_ctl_block_request(unsigned block, uint8_t out[UA101_CTL_READ_REQUEST_BYTES]);
 /* Returns 1 only for a well-formed message that asks for data and sets nothing. */
@@ -43,6 +45,15 @@ int ua101_ctl_is_request_only(const uint8_t *msg, size_t len);
    else (src/ua101_service.c): ua101_ctl_is_request_only would also let through the requests
    listed under "Commands to avoid" in docs/control-protocol.md. */
 int ua101_ctl_is_read_request(const uint8_t *msg, size_t len);
+/* The five memory reads (link version 20, for the app's memory preview): Memory 1 to 5 at
+   02 03 00 00 to 02 07 00 00, 256 bytes each. ua101_ctl_memory_request writes the request for
+   memory 0 to 4 and returns 1, or returns 0 and writes nothing for any other number.
+   ua101_ctl_memory_read_request returns the memory, 0 to 4, only for exactly one of those five
+   requests, byte for byte; -1 for anything else, block 0 included. Reading a memory changes
+   nothing on the unit. */
+#define UA101_CTL_MEMORY_BLOCK_FIRST 3
+int ua101_ctl_memory_request(unsigned memory, uint8_t out[UA101_CTL_READ_REQUEST_BYTES]);
+int ua101_ctl_memory_read_request(const uint8_t *msg, size_t len);
 /* Packs a SysEx message into USB-MIDI packets. Returns the bytes written, or 0 if it won't fit. */
 size_t ua101_ctl_pack_sysex(const uint8_t *msg, size_t len, uint8_t cable, uint8_t *out,
                             size_t capacity);
@@ -81,6 +92,9 @@ ua101_ctl_kind ua101_ctl_classify(const uint8_t *msg, size_t len, ua101_ctl_view
 /* Returns 1 and sets *block when a classified message is a whole 256-byte block from
    02 <block> 00 00, block 0 to 0x0F. */
 int ua101_ctl_block_reply(const ua101_ctl_view *view, unsigned *block);
+/* The memory, 0 to 4, when a classified message is a whole 256-byte block from one of the five
+   memories (02 03 00 00 to 02 07 00 00); -1 otherwise. */
+int ua101_ctl_memory_reply(const ua101_ctl_view *view);
 
 typedef struct {
     uint8_t on;   /* raw bit: which value means on isn't known yet */

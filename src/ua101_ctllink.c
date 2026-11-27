@@ -21,6 +21,11 @@ struct ua101_ctllink {
     int closed;            /* ua101_ctllink_close was called: no more events */
     unsigned attach_serial; /* the attach whose answer is still wanted */
     int refs;              /* the owner, each connection's handler, each reply awaited */
+    /* The link version every request carries. Each attach starts with this build's; a helper
+       of the one older version that answers UA101_LINK_ERR_VERSION is asked again in its own
+       (link version 20: it then gives no memory preview, and everything else is as before). */
+    unsigned version;
+    unsigned answered_version; /* the version of the last attach that was answered */
 };
 
 static xpc_endpoint_t g_endpoint;
@@ -140,12 +145,12 @@ static void connect_now(ua101_ctllink *l)
     xpc_connection_resume(c);
 }
 
-static xpc_object_t request(const char *op)
+static xpc_object_t request(const ua101_ctllink *l, const char *op)
 {
     xpc_object_t m = xpc_dictionary_create(NULL, NULL, 0);
 
     xpc_dictionary_set_string(m, UA101_LINK_OP, op);
-    xpc_dictionary_set_uint64(m, UA101_LINK_KEY_VERSION, UA101_LINK_VERSION);
+    xpc_dictionary_set_uint64(m, UA101_LINK_KEY_VERSION, l->version);
     return m;
 }
 
@@ -184,7 +189,51 @@ ua101_ctllink *ua101_ctllink_open(dispatch_queue_t queue, const ua101_ctllink_ev
     l->events = *events;
     l->context = context;
     l->refs = 1;
+    l->version = UA101_LINK_VERSION;
     return l;
+}
+
+unsigned ua101_ctllink_version(const ua101_ctllink *l)
+{
+    return l->answered_version;
+}
+
+/* Sends ctl_open in the link's version now; the answer, for the attach `serial`. */
+static void ask_open(ua101_ctllink *l, unsigned serial)
+{
+    ask(l, request(l, "ctl_open"), ^(xpc_object_t reply) {
+      int status = (int)xpc_dictionary_get_int64(reply, UA101_LINK_STATUS);
+      const char *why = xpc_dictionary_get_string(reply, UA101_LINK_WHY);
+      uint64_t read;
+
+      if (l->attach_serial != serial)
+          return;
+      /* A helper one version older: asked again in its own version, which differs only in
+         the memory reads it doesn't pass on. Any other version stays an error. */
+      if (status == UA101_LINK_ERR_VERSION && l->version == UA101_LINK_VERSION &&
+          l->conn != NULL) {
+          l->version = UA101_LINK_VERSION_OLDER_HELPER;
+          ask_open(l, serial);
+          return;
+      }
+      l->attach_serial = 0;
+      l->answered_version = l->version;
+      /* Only a helper of this build reads memories; an older one is never asked to. */
+      read = l->version == UA101_LINK_VERSION
+                 ? xpc_dictionary_get_uint64(reply, UA101_LINK_CTL_PASSES_READ)
+                 : 0;
+      if (status == UA101_LINK_OK && l->events.passes != NULL)
+          l->events.passes(l->context, xpc_dictionary_get_uint64(reply, UA101_LINK_CTL_PASSES),
+                           xpc_dictionary_get_uint64(reply, UA101_LINK_CTL_PASSES_ON),
+                           xpc_dictionary_get_uint64(reply, UA101_LINK_CTL_PASSES_MEMORY), read);
+      if (l->closed)
+          return;
+      if (l->events.attached != NULL)
+          l->events.attached(l->context, status,
+                             xpc_dictionary_get_bool(reply, UA101_LINK_STREAMING),
+                             xpc_dictionary_get_bool(reply, UA101_LINK_WATCHING),
+                             why != NULL ? why : "");
+    });
 }
 
 void ua101_ctllink_attach(ua101_ctllink *l)
@@ -197,25 +246,9 @@ void ua101_ctllink_attach(ua101_ctllink *l)
     if (l->conn == NULL)
         connect_now(l);
     l->attach_serial = serial;
-    ask(l, request("ctl_open"), ^(xpc_object_t reply) {
-      int status = (int)xpc_dictionary_get_int64(reply, UA101_LINK_STATUS);
-      const char *why = xpc_dictionary_get_string(reply, UA101_LINK_WHY);
-
-      if (l->attach_serial != serial)
-          return;
-      l->attach_serial = 0;
-      if (status == UA101_LINK_OK && l->events.passes != NULL)
-          l->events.passes(l->context, xpc_dictionary_get_uint64(reply, UA101_LINK_CTL_PASSES),
-                           xpc_dictionary_get_uint64(reply, UA101_LINK_CTL_PASSES_ON),
-                           xpc_dictionary_get_uint64(reply, UA101_LINK_CTL_PASSES_MEMORY));
-      if (l->closed)
-          return;
-      if (l->events.attached != NULL)
-          l->events.attached(l->context, status,
-                             xpc_dictionary_get_bool(reply, UA101_LINK_STREAMING),
-                             xpc_dictionary_get_bool(reply, UA101_LINK_WATCHING),
-                             why != NULL ? why : "");
-    });
+    /* Each attach tries this build's version first: the helper may have been updated. */
+    l->version = UA101_LINK_VERSION;
+    ask_open(l, serial);
     /* A helper that is there but stuck never answers; say so instead of waiting for ever. */
     l->refs++;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
@@ -237,7 +270,7 @@ int ua101_ctllink_send(ua101_ctllink *l, const uint8_t *msg, size_t len)
 
     if (l->closed || l->conn == NULL || msg == NULL || len == 0)
         return 0;
-    m = request("ctl_send");
+    m = request(l, "ctl_send");
     xpc_dictionary_set_data(m, UA101_LINK_DATA, msg, len);
     ask(l, m, ^(xpc_object_t reply) {
       int status = (int)xpc_dictionary_get_int64(reply, UA101_LINK_STATUS);
@@ -268,7 +301,7 @@ void ua101_ctllink_ask_levels(ua101_ctllink *l)
 {
     if (l->closed || l->conn == NULL)
         return;
-    ask(l, request("levels"), ^(xpc_object_t reply) {
+    ask(l, request(l, "levels"), ^(xpc_object_t reply) {
       ua101_ctl_levels levels;
 
       if (xpc_dictionary_get_int64(reply, UA101_LINK_STATUS) != UA101_LINK_OK ||
@@ -293,7 +326,7 @@ void ua101_ctllink_detach(ua101_ctllink *l)
     /* The helper is told, then the connection is dropped; its last event frees it. Dropping it
        also detaches, should the message not arrive. */
     {
-        xpc_object_t m = request("ctl_close");
+        xpc_object_t m = request(l, "ctl_close");
 
         xpc_connection_send_message(c, m);
         xpc_release(m);

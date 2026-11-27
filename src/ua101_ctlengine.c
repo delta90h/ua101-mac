@@ -75,7 +75,9 @@ static int emit(ua101_engine *e, const uint8_t *msg, size_t len, uint64_t now)
     }
     e->seq++;
     e->next_send_at = now + e->cfg.min_gap_us;
-    if (risk == UA101_RISK_READ)
+    if (risk == UA101_RISK_READ && ua101_ctl_memory_read_request(msg, len) >= 0)
+        e->memory_reads_sent++;
+    else if (risk == UA101_RISK_READ)
         e->reads_sent++;
     else if (risk == UA101_RISK_SETTING)
         e->sets_sent++;
@@ -132,6 +134,34 @@ static void want_read(ua101_engine *e, uint64_t at)
     e->read_wanted = 1;
 }
 
+/* What was read of the memories may be out of date: forget it, and any read under way. */
+static void forget_memories(ua101_engine *e)
+{
+    if (e->memory_known || e->memory_failed || e->mem_wanted || e->mem_waiting)
+        e->events |= UA101_EV_MEMORY;
+    e->memory_known = e->memory_failed = 0;
+    e->mem_wanted = e->mem_waiting = e->mem_tries = 0;
+}
+
+/* A memory read may go out now: settings known, nothing else on its way. */
+static int memory_read_free(const ua101_engine *e, uint64_t now)
+{
+    return e->state == UA101_ENG_READY && !ua101_eng_busy(e) && !e->drags && !e->settling &&
+           !e->read_waiting && !e->read_wanted && !e->saving_hold && now >= e->next_send_at;
+}
+
+static void send_memory_read(ua101_engine *e, uint64_t now)
+{
+    ua101_msg m = {.kind = UA101_MSG_READ_MEMORY};
+
+    m.memory = (uint8_t)(e->mem_wanted - 1);
+    e->mem_waiting = e->mem_wanted;
+    e->mem_wanted = 0;
+    /* If the way to the unit refuses it, the timeout tries again. */
+    (void)emit_msg(e, &m, now);
+    e->mem_deadline = now + e->cfg.read_timeout_us;
+}
+
 void ua101_eng_transport(ua101_engine *e, int up, uint64_t now)
 {
     /* saving_paused is kept: if the unit was told to pause its saving and is
@@ -146,6 +176,7 @@ void ua101_eng_transport(ua101_engine *e, int up, uint64_t now)
     e->asked = 0;
     e->ticket = 0;
     e->next_send_at = now;
+    forget_memories(e);
     if (up) {
         set_state(e, UA101_ENG_SYNCING);
         send_read(e, now);
@@ -223,6 +254,7 @@ static void take_block(ua101_engine *e, const uint8_t *block, uint64_t now)
 void ua101_eng_receive(ua101_engine *e, const uint8_t *msg, size_t len, uint64_t now)
 {
     ua101_ctl_view view;
+    int memory;
 
     if (e->state == UA101_ENG_OFFLINE)
         return;
@@ -230,20 +262,39 @@ void ua101_eng_receive(ua101_engine *e, const uint8_t *msg, size_t len, uint64_t
     case UA101_CTL_SETTINGS:
         take_block(e, view.data, now);
         break;
+    case UA101_CTL_OTHER:
+        memory = ua101_ctl_memory_reply(&view);
+        if (memory < 0) {
+            e->other_messages++;
+            break;
+        }
+        /* A memory's block, by its address: never taken for the settings in use. */
+        memcpy(e->memory[memory], view.data, UA101_CTL_BLOCK_BYTES);
+        e->memory_known |= (uint8_t)(1u << memory);
+        e->memory_failed &= (uint8_t)~(1u << memory);
+        e->memory_blocks_received++;
+        if (e->mem_waiting == (unsigned)memory + 1) {
+            e->mem_waiting = 0;
+            e->mem_tries = 0;
+        }
+        e->events |= UA101_EV_MEMORY;
+        break;
     case UA101_CTL_CHANGE:
         /* Never act on one of these: wait for the burst to end, then read. */
         e->settling = 1;
         e->last_change_at = now;
         e->events |= UA101_EV_SETTLING;
         break;
-    case UA101_CTL_OTHER:
-        e->other_messages++;
-        break;
     default:
         e->bad_messages++;
-        /* A damaged block still used up one of our reads. */
-        if (len == UA101_CTL_BLOCK_MESSAGE_BYTES)
+        /* A damaged block still used up one of our reads: the memory's, while one is out (no
+           settings read goes out meanwhile), else the oldest settings read. The memory read
+           is asked for again at once. */
+        if (len == UA101_CTL_BLOCK_MESSAGE_BYTES && e->mem_waiting) {
+            e->mem_deadline = now;
+        } else if (len == UA101_CTL_BLOCK_MESSAGE_BYTES) {
             (void)answered_read(e, now);
+        }
         break;
     }
     ua101_eng_tick(e, now);
@@ -274,7 +325,23 @@ void ua101_eng_tick(ua101_engine *e, uint64_t now)
             if (e->saving_hold)
                 e->saving_hold = 2;
             set_state(e, UA101_ENG_SILENT);
+            forget_memories(e);
             want_read(e, now + e->cfg.silent_retry_us);
+        }
+    }
+
+    if (e->mem_waiting && now >= e->mem_deadline) {
+        unsigned memory = e->mem_waiting - 1;
+
+        e->mem_waiting = 0;
+        if (e->mem_wanted) {
+            e->mem_tries = 0; /* another memory was asked for meanwhile: that one now */
+        } else if (++e->mem_tries < e->cfg.read_tries) {
+            e->mem_wanted = memory + 1; /* asked again when the way is free */
+        } else {
+            e->memory_failed |= (uint8_t)(1u << memory);
+            e->mem_tries = 0;
+            e->events |= UA101_EV_MEMORY;
         }
     }
 
@@ -328,8 +395,14 @@ void ua101_eng_tick(ua101_engine *e, uint64_t now)
     if (verify_due(e) && now >= e->last_write_at + e->cfg.verify_quiet_us)
         want_read(e, now);
 
-    if (e->read_wanted && !e->read_waiting && now >= e->read_at && now >= e->next_send_at)
+    /* A settings read waits for a memory's block (a moment, or its timeout), so a damaged
+       block is never taken for the answer to the wrong one. */
+    if (e->read_wanted && !e->read_waiting && !e->mem_waiting && now >= e->read_at &&
+        now >= e->next_send_at)
         send_read(e, now);
+
+    if (e->mem_wanted && !e->mem_waiting && memory_read_free(e, now))
+        send_memory_read(e, now);
 
     fire(e);
 }
@@ -356,9 +429,51 @@ uint64_t ua101_eng_next_deadline(const ua101_engine *e)
     if (verify_due(e) &&
         (c = later(e->last_write_at + e->cfg.verify_quiet_us, e->next_send_at)) < t)
         t = c;
-    if (e->read_wanted && !e->read_waiting && (c = later(e->read_at, e->next_send_at)) < t)
+    if (e->read_wanted && !e->read_waiting && !e->mem_waiting &&
+        (c = later(e->read_at, e->next_send_at)) < t)
         t = c;
+    if (e->mem_waiting && e->mem_deadline < t)
+        t = e->mem_deadline;
+    /* A wanted memory read whose only obstacle is the gap between messages; anything else in
+       its way has a deadline of its own, or ends with a call (a drag's end). */
+    if (e->mem_wanted && !e->mem_waiting && e->state == UA101_ENG_READY && !ua101_eng_busy(e) &&
+        !e->drags && !e->settling && !e->read_waiting && !e->read_wanted && !e->saving_hold &&
+        e->next_send_at < t)
+        t = e->next_send_at;
     return t;
+}
+
+ua101_eng_result ua101_eng_read_memory(ua101_engine *e, unsigned memory, uint64_t now)
+{
+    if (memory >= UA101_MEMORIES)
+        return UA101_ENG_ERR_VALUE;
+    if (e->state != UA101_ENG_READY)
+        return UA101_ENG_ERR_NOT_READY;
+    e->memory_failed &= (uint8_t)~(1u << memory);
+    if (e->mem_waiting != memory + 1) {
+        e->mem_wanted = memory + 1;
+        if (!e->mem_waiting)
+            e->mem_tries = 0;
+    }
+    e->events |= UA101_EV_MEMORY;
+    ua101_eng_tick(e, now);
+    return UA101_ENG_OK;
+}
+
+const uint8_t *ua101_eng_memory_block(const ua101_engine *e, unsigned memory)
+{
+    if (memory >= UA101_MEMORIES || !(e->memory_known & (1u << memory)))
+        return NULL;
+    return e->memory[memory];
+}
+
+int ua101_eng_memory_reading(const ua101_engine *e, unsigned memory)
+{
+    if (memory >= UA101_MEMORIES)
+        return 0;
+    if (e->mem_wanted == memory + 1 || e->mem_waiting == memory + 1)
+        return 1;
+    return (e->memory_failed & (1u << memory)) ? 2 : 0;
 }
 
 void ua101_eng_allow_writes(ua101_engine *e, int allow)
@@ -641,6 +756,8 @@ ua101_eng_result ua101_eng_memory_confirm(ua101_engine *e, uint32_t ticket, uint
     e->memory_pass = 0;
     if (!sent)
         return UA101_ENG_ERR_NOT_READY;
+    /* A Load, Store or Reset may change what the memories hold, or are read against. */
+    forget_memories(e);
     /* The unit's settings may all be different now. */
     want_read(e, now + e->cfg.memory_settle_us);
     ua101_eng_tick(e, now);

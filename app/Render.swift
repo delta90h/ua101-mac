@@ -89,6 +89,23 @@ final class Bench {
         settle()
     }
 
+    /// For the pictures of Recall Memory: memory `m` of the unit (`real`: the one behind the
+    /// stand-in helper) holds the settings in use with INPUT 1 at -6 dB, INPUT 3 and 4 muted and
+    /// the patch bay's OUTPUT 3-4 from INPUT 1-2; then the app reads it, as the dialog does.
+    func memoryToShow(_ m: Int, real: Bool) {
+        let u = real ? fake.unit : unit
+        var b = [UInt8](repeating: 0, count: 256)
+        panel_sim_block(u.sim, &b)
+        let inp = ChannelNames.groupInput
+        let at = PanelModel.volumeOffset(StripID(group: inp, channel: 0))
+        b.replaceSubrange(at..<at + 6, with: PanelModel.volumeDigits(FaderScale.volume(dB: -6)))
+        for c in 2..<4 { let on = PanelModel.onPlace(StripID(group: inp, channel: c)); b[on.byte] |= UInt8(1 << on.bit) }
+        b[13] = 2 // patch bay, OUTPUT 3-4: INPUT 1-2
+        panel_sim_set_memory(u.sim, UInt32(m), b)
+        model.readMemoryPreview(m)
+        settle()
+    }
+
     /// A believable working set-up, for the pictures.
     func dressUp() {
         let inp = ChannelNames.groupInput, out = ChannelNames.groupOutput
@@ -206,6 +223,7 @@ func renderAllWindows(into directory: String) -> [String] {
     // 10 to 14. Load, Store, Reset.
     let memory = Bench()
     memory.openUp()
+    memory.memoryToShow(2, real: false)
     shot("10-load-step-1-choose", .dark, MemoryDialogView(model: memory.model, purpose: .load, memory: 2, messages: memory.messages))
     memory.model.prepareMemory(MemoryCommand(kind: .load, memory: 2, patchBay: true, mixer: true))
     shot("11-load-step-2-confirm", .dark, MemoryDialogView(model: memory.model, purpose: .load, memory: 2, messages: memory.messages))

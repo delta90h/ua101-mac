@@ -119,6 +119,15 @@ void ua101_sim_receive(ua101_sim *s, const uint8_t *msg, size_t len)
         s->reads++;
         reply(s, k_block_address, s->block, sizeof(s->block));
         return;
+    case UA101_MSG_READ_MEMORY: {
+        /* As the real unit answers (box test 2026-11-27): the memory's 256 bytes, from
+           02 03+m 00 00, in the settings block's layout. */
+        const uint8_t address[4] = {0x02, (uint8_t)(UA101_CTL_MEMORY_BLOCK_FIRST + m.memory), 0, 0};
+
+        s->memory_reads++;
+        reply(s, address, s->memory[m.memory], sizeof(s->block));
+        return;
+    }
     case UA101_MSG_FIELD:
         if (s->ignore_kind_plus_1 == m.field.kind + 1 ||
             (s->ignore_mixer_without_soft_control && ua101_field_is_mixer(m.field) &&

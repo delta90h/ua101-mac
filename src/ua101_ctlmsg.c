@@ -301,11 +301,19 @@ ua101_msg_kind ua101_ctlmsg_parse(const uint8_t *bytes, size_t len, ua101_msg *o
     uint8_t request[UA101_CTL_READ_REQUEST_BYTES];
     ua101_ctl_view view;
     ua101_ctl_kind kind;
+    int memory;
 
     memset(out, 0, sizeof(*out));
     ua101_ctl_read_request(request);
     if (len == sizeof(request) && memcmp(bytes, request, len) == 0) {
         out->kind = UA101_MSG_READ_BLOCK;
+        return out->kind;
+    }
+    /* Exactly one of the five memory reads, byte for byte; every other request stays
+       UNKNOWN (02 0D to 02 0F hung the unit's control port). */
+    if ((memory = ua101_ctl_memory_read_request(bytes, len)) >= 0) {
+        out->kind = UA101_MSG_READ_MEMORY;
+        out->memory = (uint8_t)memory;
         return out->kind;
     }
     kind = ua101_ctl_classify(bytes, len, &view);
@@ -321,6 +329,7 @@ ua101_risk ua101_ctlmsg_risk(const uint8_t *bytes, size_t len)
 
     switch (ua101_ctlmsg_parse(bytes, len, &m)) {
     case UA101_MSG_READ_BLOCK:
+    case UA101_MSG_READ_MEMORY:
         return UA101_RISK_READ;
     case UA101_MSG_FIELD:
     case UA101_MSG_AUTOSAVE:

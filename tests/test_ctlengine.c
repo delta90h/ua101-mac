@@ -1651,6 +1651,151 @@ static void test_random(void)
     EXPECT(g_memory_commands > 20); /* the runs that may use them did */
 }
 
+/* ---- the memory preview (link version 20) ---- */
+
+/* Not inlined, as test_solo. */
+__attribute__((noinline)) static void test_memory_preview(void)
+{
+    uint8_t b[32];
+    ua101_msg m;
+    size_t len;
+    unsigned i, before, mem;
+    uint32_t ticket;
+    rig r;
+
+    /* The five reads are reads, built and parsed back; the blocks around them stay unknown. */
+    for (mem = 0; mem < UA101_MEMORIES; mem++) {
+        memset(&m, 0, sizeof(m));
+        m.kind = UA101_MSG_READ_MEMORY;
+        m.memory = (uint8_t)mem;
+        len = ua101_ctlmsg_build(&m, b);
+        EXPECT(len == UA101_CTL_READ_REQUEST_BYTES && b[7] == 3 + mem);
+        EXPECT(ua101_ctlmsg_risk(b, len) == UA101_RISK_READ);
+        EXPECT(ua101_ctlmsg_parse(b, len, &m) == UA101_MSG_READ_MEMORY && m.memory == mem);
+    }
+    m.memory = 5;
+    EXPECT(ua101_ctlmsg_build(&m, b) == 0);
+    for (i = 1; i < UA101_CTL_BLOCKS; i++) {
+        EXPECT(ua101_ctl_block_request(i, b));
+        EXPECT(ua101_ctlmsg_risk(b, UA101_CTL_READ_REQUEST_BYTES) ==
+               (i >= 3 && i <= 7 ? UA101_RISK_READ : UA101_RISK_NEVER));
+    }
+
+    /* Read-only, as after connecting: a memory can still be read, and nothing else goes. */
+    rig_init(&r, NULL);
+    EXPECT(ua101_eng_read_memory(&r.eng, 0, r.now) == UA101_ENG_ERR_NOT_READY);
+    ua101_eng_transport(&r.eng, 1, r.now);
+    settle(&r);
+    r.sim.memory[2][0x80] = 0x01; /* Memory 3 holds INPUT 1 a step away from the settings */
+    r.sim.memory[4][0x1E] = 0x01; /* Memory 5 holds INPUT 1 muted */
+    EXPECT(ua101_eng_read_memory(&r.eng, 5, r.now) == UA101_ENG_ERR_VALUE);
+    EXPECT(ua101_eng_memory_block(&r.eng, 2) == NULL && ua101_eng_memory_reading(&r.eng, 2) == 0);
+    before = r.sent_count;
+    r.events = 0;
+    EXPECT(ua101_eng_read_memory(&r.eng, 2, r.now) == UA101_ENG_OK);
+    EXPECT(ua101_eng_memory_reading(&r.eng, 2) == 1);
+    settle(&r);
+    EXPECT(r.sent_count == before + 1 && r.sent[before].kind == UA101_MSG_READ_MEMORY &&
+           r.sent[before].memory == 2);
+    EXPECT(r.sim.memory_reads == 1 && r.eng.memory_reads_sent == 1);
+    EXPECT(ua101_eng_memory_reading(&r.eng, 2) == 0 && (r.events & UA101_EV_MEMORY));
+    EXPECT(ua101_eng_memory_block(&r.eng, 2) != NULL &&
+           memcmp(ua101_eng_memory_block(&r.eng, 2), r.sim.memory[2], UA101_CTL_BLOCK_BYTES) == 0);
+    /* The memory's block is never the settings in use. */
+    EXPECT(memcmp(r.eng.unit, r.sim.block, UA101_CTL_BLOCK_BYTES) == 0 &&
+           ua101_eng_settings(&r.eng)->channel[IN][0].volume == UNITY);
+    EXPECT(r.eng.other_messages == 0 && r.eng.blocks_received == 1);
+
+    /* A second ask replaces one not gone out yet: only the last is read. */
+    ua101_eng_allow_writes(&r.eng, 1);
+    ua101_sim_switch_move(&r.sim, UA101_SIM_SWITCH_SOFT, 1, 0);
+    ua101_eng_refresh(&r.eng, r.now);
+    settle(&r);
+    before = r.sent_count;
+    ua101_eng_drag_begin(&r.eng, r.now);
+    EXPECT(ua101_eng_set_volume(&r.eng, IN, 3, 0x1000, r.now) == UA101_ENG_OK);
+    EXPECT(ua101_eng_read_memory(&r.eng, 0, r.now) == UA101_ENG_OK);
+    EXPECT(ua101_eng_read_memory(&r.eng, 4, r.now) == UA101_ENG_OK);
+    /* Never during a drag, nor while a change waits or is being checked. */
+    advance(&r, 3000000);
+    EXPECT(count_kind(&r, UA101_MSG_READ_MEMORY, before) == 0);
+    EXPECT(ua101_eng_memory_reading(&r.eng, 4) == 1 && ua101_eng_memory_reading(&r.eng, 0) == 0);
+    ua101_eng_drag_end(&r.eng, r.now);
+    settle(&r);
+    EXPECT(count_kind(&r, UA101_MSG_READ_MEMORY, before) == 1);
+    /* It went after the change was checked and the saving resumed. */
+    for (i = before; i < r.sent_count && r.sent[i].kind != UA101_MSG_READ_MEMORY; i++)
+        ;
+    EXPECT(i < r.sent_count && r.sent[i].memory == 4 && i > before);
+    EXPECT(r.sent[i - 1].kind == UA101_MSG_READ_BLOCK);
+    EXPECT(!ua101_eng_busy(&r.eng) && r.sim.saving_paused == 0);
+    EXPECT(ua101_eng_memory_block(&r.eng, 4)[0x1E] == 0x01);
+    EXPECT(ua101_eng_memory_block(&r.eng, 0) == NULL);
+
+    /* A damaged block counts as no answer: asked again at once, and then it comes. */
+    before = r.sent_count;
+    r.sim.corrupt_next_reply = 1;
+    EXPECT(ua101_eng_read_memory(&r.eng, 1, r.now) == UA101_ENG_OK);
+    settle(&r);
+    EXPECT(count_kind(&r, UA101_MSG_READ_MEMORY, before) == 2 && r.eng.bad_messages == 1);
+    EXPECT(ua101_eng_memory_block(&r.eng, 1) != NULL && r.eng.blocks_received > 1);
+
+    /* A lost answer: a settings read wanted meanwhile waits for the memory read's timeout
+       instead of crossing it; then the settings are read, and the memory is asked again. */
+    before = r.sent_count;
+    r.sim.silent = 1;
+    EXPECT(ua101_eng_read_memory(&r.eng, 3, r.now) == UA101_ENG_OK);
+    r.sim.silent = 0;
+    ua101_eng_refresh(&r.eng, r.now);
+    advance(&r, 500000);
+    EXPECT(count_kind(&r, UA101_MSG_READ_BLOCK, before) == 0);
+    settle(&r);
+    EXPECT(count_kind(&r, UA101_MSG_READ_BLOCK, before) == 1);
+    EXPECT(count_kind(&r, UA101_MSG_READ_MEMORY, before) == 2);
+    EXPECT(ua101_eng_memory_block(&r.eng, 3) != NULL);
+
+    /* A memory that never answers (the settings do): tried read_tries times, then "no
+       answer", and the rest goes on. */
+    before = r.sent_count;
+    r.sim.silent = 1;
+    r.events = 0;
+    EXPECT(ua101_eng_read_memory(&r.eng, 1, r.now) == UA101_ENG_OK);
+    advance(&r, 3100000);
+    r.sim.silent = 0;
+    EXPECT(count_kind(&r, UA101_MSG_READ_MEMORY, before) == 3);
+    EXPECT(ua101_eng_memory_reading(&r.eng, 1) == 2);
+    EXPECT(r.events & UA101_EV_MEMORY);
+    EXPECT(r.eng.state == UA101_ENG_READY);
+    settle(&r);
+    EXPECT(count_kind(&r, UA101_MSG_READ_MEMORY, before) == 3);
+    /* Asking again clears "no answer". */
+    EXPECT(ua101_eng_read_memory(&r.eng, 1, r.now) == UA101_ENG_OK);
+    EXPECT(ua101_eng_memory_reading(&r.eng, 1) == 1);
+    settle(&r);
+    EXPECT(ua101_eng_memory_reading(&r.eng, 1) == 0 && ua101_eng_memory_block(&r.eng, 1) != NULL);
+
+    /* A Load sent: what was read of the memories may be out of date, so it is forgotten. */
+    ua101_eng_allow_memory(&r.eng, 1);
+    memset(&m, 0, sizeof(m));
+    m.kind = UA101_MSG_LOAD;
+    m.memory = 4;
+    m.sections[3] = 1;
+    EXPECT(ua101_eng_memory_prepare(&r.eng, &m, r.now, &ticket) == UA101_ENG_OK);
+    EXPECT(ua101_eng_memory_confirm(&r.eng, ticket, r.now) == UA101_ENG_OK);
+    for (mem = 0; mem < UA101_MEMORIES; mem++)
+        EXPECT(ua101_eng_memory_block(&r.eng, mem) == NULL);
+    settle(&r);
+    EXPECT(ua101_eng_settings(&r.eng)->channel[IN][0].on == 1); /* Memory 5's mute came in */
+
+    /* The way to the unit going away forgets them too. */
+    EXPECT(ua101_eng_read_memory(&r.eng, 0, r.now) == UA101_ENG_OK);
+    settle(&r);
+    EXPECT(ua101_eng_memory_block(&r.eng, 0) != NULL);
+    ua101_eng_transport(&r.eng, 0, r.now);
+    EXPECT(ua101_eng_memory_block(&r.eng, 0) == NULL && ua101_eng_memory_reading(&r.eng, 0) == 0);
+    rig_check(&r);
+}
+
 int main(void)
 {
     test_examples();
@@ -1676,6 +1821,7 @@ int main(void)
     test_192k();
     test_patch_presets();
     test_memory_commands();
+    test_memory_preview();
     test_guard();
     test_random();
 

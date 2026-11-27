@@ -21,7 +21,9 @@ _Static_assert(PANEL_OK == (int)UA101_ENG_OK && PANEL_CLAMPED == (int)UA101_ENG_
                PANEL_ERR_VALUE == (int)UA101_ENG_ERR_VALUE &&
                PANEL_ERR_BUSY == (int)UA101_ENG_ERR_BUSY && PANEL_ERR_TICKET == (int)UA101_ENG_ERR_TICKET, "results");
 _Static_assert(PANEL_EV_STATE == UA101_EV_STATE && PANEL_EV_SETTINGS == UA101_EV_SETTINGS &&
-               PANEL_EV_SETTLING == UA101_EV_SETTLING && PANEL_EV_DISAGREE == UA101_EV_DISAGREE, "events");
+               PANEL_EV_SETTLING == UA101_EV_SETTLING && PANEL_EV_DISAGREE == UA101_EV_DISAGREE &&
+               PANEL_EV_MEMORY == UA101_EV_MEMORY, "events");
+_Static_assert(PANEL_PASS_READ_MEMORY_0 == UA101_CTL_PASS_READ_MEMORY(0), "what a helper reads");
 _Static_assert(PANEL_F_VOLUME == (int)UA101_F_VOLUME && PANEL_F_PAN == (int)UA101_F_PAN && PANEL_F_ON == (int)UA101_F_ON &&
                PANEL_F_LINK == (int)UA101_F_LINK && PANEL_F_SOLO == (int)UA101_F_SOLO && PANEL_F_PATCH == (int)UA101_F_PATCH, "fields");
 _Static_assert(PANEL_SWITCH_DIGITAL == (int)UA101_SIM_SWITCH_DIGITAL && PANEL_SWITCH_MONO == (int)UA101_SIM_SWITCH_MONO &&
@@ -411,6 +413,7 @@ int panel_sim_digital(const panel_sim *s) { return sim_settings(s).clock_source 
 int panel_sim_rate_code(const panel_sim *s) { return sim_settings(s).rate_code; }
 int panel_sim_saving_paused(const panel_sim *s) { return CS(s)->saving_paused; }
 uint64_t panel_sim_reads(const panel_sim *s) { return CS(s)->reads; }
+uint64_t panel_sim_memory_reads(const panel_sim *s) { return CS(s)->memory_reads; }
 uint64_t panel_sim_sets_applied(const panel_sim *s) { return CS(s)->sets_applied; }
 uint64_t panel_sim_saves(const panel_sim *s) { return CS(s)->saves; }
 uint64_t panel_sim_memory_commands(const panel_sim *s) { return CS(s)->memory_commands; }
@@ -424,6 +427,7 @@ int panel_is_read_request(const uint8_t *msg, size_t len)
 uint64_t panel_helper_passes(void) { return UA101_CTL_PASSES; }
 uint64_t panel_helper_passes_on(void) { return UA101_CTL_PASSES_ON; }
 uint64_t panel_helper_passes_memory(void) { return UA101_CTL_PASSES_MEMORY; }
+uint64_t panel_helper_passes_read(void) { return UA101_CTL_PASSES_READ; }
 const char *panel_old_memory_go_ahead_path(void) { return UA101_OLD_MEMORY_GO_AHEAD_PATH; }
 unsigned panel_memory_fresh_seconds(void) { return UA101_MEMORY_FRESH_SECONDS; }
 unsigned panel_memory_gap_seconds(void) { return UA101_MEMORY_GAP_SECONDS; }
@@ -434,6 +438,40 @@ int panel_pause_saving(panel_engine *e, uint64_t now) { return (int)ua101_eng_pa
 int panel_resume_saving(panel_engine *e, uint64_t now) { return (int)ua101_eng_resume_saving(E(e), now); }
 int panel_saving_held(const panel_engine *e) { return ua101_eng_saving_held(CE(e)); }
 void panel_unit_block(const panel_engine *e, uint8_t out[256]) { memcpy(out, CE(e)->unit, 256); }
+
+int panel_read_memory(panel_engine *e, unsigned memory, uint64_t now)
+{
+    return (int)ua101_eng_read_memory(E(e), memory, now);
+}
+
+int panel_memory_block(const panel_engine *e, unsigned memory, uint8_t out[256])
+{
+    const uint8_t *b = ua101_eng_memory_block(CE(e), memory);
+
+    memset(out, 0, 256);
+    if (b == NULL)
+        return 0;
+    memcpy(out, b, 256);
+    return 1;
+}
+
+int panel_memory_reading(const panel_engine *e, unsigned memory)
+{
+    return ua101_eng_memory_reading(CE(e), memory);
+}
+
+uint64_t panel_memory_reads_sent(const panel_engine *e) { return CE(e)->memory_reads_sent; }
+
+void panel_memory_read_message(unsigned memory, uint8_t out[16])
+{
+    if (!ua101_ctl_memory_request(memory, out))
+        memset(out, 0, 16);
+}
+
+int panel_memory_read_number(const uint8_t *msg, size_t len)
+{
+    return ua101_ctl_memory_read_request(msg, len);
+}
 uint64_t panel_blocks_received(const panel_engine *e) { return CE(e)->blocks_received; }
 uint64_t panel_other_messages(const panel_engine *e) { return CE(e)->other_messages; }
 

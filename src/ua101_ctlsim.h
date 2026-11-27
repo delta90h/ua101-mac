@@ -1,7 +1,7 @@
 /*
  * A pretend UA-101 for the control app: it holds a settings block and five
- * memories, answers the read request, applies the set messages and reports
- * front-panel switches, all in SysEx as docs/control-protocol.md describes.
+ * memories, answers the read request and the five memory reads, applies the
+ * set messages and reports front-panel switches, all in SysEx as docs/control-protocol.md describes.
  * It lets the engine and the windows be built with the real unit switched off.
  *
  * WHAT IT PROVES: that the engine speaks the protocol as the notes describe it.
@@ -48,7 +48,7 @@ typedef struct {
     int ignore_kind_plus_1;                 /* ignores sets of this ua101_field_kind + 1 */
     int ignore_mixer_without_soft_control;
 
-    uint64_t reads, sets_applied, sets_ignored, saves;
+    uint64_t reads, memory_reads, sets_applied, sets_ignored, saves;
     uint64_t memory_commands, unknown_messages, bad_messages, dropped;
     ua101_msg last_memory_command;
 } ua101_sim;
