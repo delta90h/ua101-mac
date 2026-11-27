@@ -58,7 +58,7 @@ enum {
     PANEL_PASS_SAVING = 1,          /* pause and resume the unit's saving */
     PANEL_PASS_PATCH = 2,           /* the patch bay source of some output pairs: */
     PANEL_PASS_PATCH_OUTPUT_0 = 0x100, /* this bit, shifted left by the pair's number 0 to 4 */
-    PANEL_PASS_VOLUME = 4,          /* the volume, up to 0 dB, of some channels: */
+    PANEL_PASS_VOLUME = 4,          /* the volume, up to +12 dB, of some channels: */
     PANEL_PASS_VOLUME_CHANNEL_0 = 0x10000, /* this bit, shifted left by the channel's number:
                                        0 and 1 MONITOR OUT L and R, 2 to 11 INPUT 1 to 10,
                                        12 to 21 OUTPUT 1 to 10 */
@@ -205,7 +205,8 @@ void panel_patch_message(unsigned output, uint32_t source, uint8_t out[13]);
 /* The output pair, 0 to 4, if this is such a message with a source 1 to 11, byte for byte;
  * -1 for anything else. */
 int panel_patch_message_output(const uint8_t *msg, size_t len);
-/* A VOLUME FOR THE REAL UNIT. A helper passes on only a value that is at most 0 dB, the first
+/* A VOLUME FOR THE REAL UNIT. A helper passes on only a value that is at most 0x7FFFFF (about
+ * +12 dB; up to link version 18, 0 dB), the first
  * digit sent being the highest (proven on the unit, 2026-11-12; src/ua101_service.c,
  * volume_change_passes). The app follows the same rule with code of its own: 1 if v is such
  * a value. */
@@ -214,7 +215,7 @@ int panel_volume_sendable(uint32_t v);
  * a value that doesn't exist. */
 void panel_volume_message(unsigned group, unsigned channel, uint32_t v, uint8_t out[18]);
 /* The channel's number, 0 to 21 as in PANEL_PASS_VOLUME_CHANNEL_0, if this is such a message,
- * byte for byte, with a value that is at most 0 dB; -1 for anything else. */
+ * byte for byte, with a value that is at most 0x7FFFFF; -1 for anything else. */
 int panel_volume_message_channel(const uint8_t *msg, size_t len);
 /* A PAN FOR THE REAL UNIT. A helper passes on only a value within 0x0000 to 0x8000, the first
  * digit sent being the highest (proven on the unit, 2026-11-12; src/ua101_service.c,

@@ -491,9 +491,10 @@ int panel_patch_message_output(const uint8_t *msg, size_t len)
     return -1;
 }
 
-/* At most 0 dB. The first digit sent is the highest (read back from the unit, 2026-11-12), so
- * the number itself is what the unit takes. */
-int panel_volume_sendable(uint32_t v) { return v <= PANEL_UNITY_VOLUME; }
+/* At most the top of the unit's range, 0x7FFFFF (about +12 dB; up to 2026-11-27, 0 dB). The
+ * first digit sent is the highest (read back from the unit, 2026-11-12), so the number itself
+ * is what the unit takes. */
+int panel_volume_sendable(uint32_t v) { return v <= PANEL_MAX_VOLUME; }
 
 void panel_volume_message(unsigned group, unsigned channel, uint32_t v, uint8_t out[18])
 {

@@ -70,9 +70,15 @@ final class PanelUI: ObservableObject {
 struct DragTrack {
     /// The control's value where the drag began (a fader's position 0 to 1, a pan's number).
     let start: Double
+    /// A stop on the way up: a drag that began below it goes no higher (a fader's 0 dB, the
+    /// user's choice of 2026-11-27). Let go and push again from there to go past it.
+    let stop: Double?
     private(set) var moved = false
 
-    init(start: Double) { self.start = start }
+    init(start: Double, stopAt: Double? = nil) {
+        self.start = start
+        self.stop = stopAt.flatMap { start < $0 ? $0 : nil }
+    }
 
     /// The value for a hand that is `travel` (points; up or right is more) from where it
     /// pressed, when `full` points are the control's whole range `range`. Nil while the hand
@@ -80,7 +86,7 @@ struct DragTrack {
     mutating func value(travel: CGFloat, full: CGFloat, range: Double) -> Double? {
         if !moved && travel == 0 { return nil }
         moved = true
-        return min(range, max(0, start + Double(travel / full) * range))
+        return min(stop ?? range, range, max(0, start + Double(travel / full) * range))
     }
 }
 
@@ -430,7 +436,8 @@ struct Fader: View {
         .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(MixerWindowView.space))
             .onChanged { g in
                 if track == nil {
-                    track = DragTrack(start: pos)
+                    // From below 0 dB the fader stops at 0 dB; from there a new push goes higher.
+                    track = DragTrack(start: pos, stopAt: FaderScale.position(dB: 0))
                     model.cursor = id
                     model.beginDrag(volumeOf: id)
                 }
@@ -446,7 +453,7 @@ struct Fader: View {
                 track = nil
                 model.endDrag()
             })
-        .help("Volume: drag up or down")
+        .help("Volume: drag up or down. It stops at 0 dB; let go and push again to go up to +12 dB.")
     }
 }
 

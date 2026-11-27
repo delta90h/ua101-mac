@@ -22,7 +22,7 @@ Only the helper talks USB. Everything else asks it.
 
 - **Shared memory** (`ua101_shared.h`): one block with the clock and two rings between helper and audio plug-in. Change its layout, change its version.
 - **Link version** (`UA101_LINK_VERSION` in `ua101_link.h`): in every request; the helper refuses any other number. Raise it when what is said between the parts changes. Helper, plug-ins and app must come from one build.
-- **The helper is the gate.** It passes on only messages it lists, byte for byte (`ua101_service_passes`, `ua101_service_memory_passes`): never a volume above 0 dB; Load, Store and Reset never while sound streams and only after a fresh read. The app has checks of its own, but the helper doesn't trust them.
+- **The helper is the gate.** It passes on only messages it lists, byte for byte (`ua101_service_passes`, `ua101_service_memory_passes`): never a volume above the top of the unit's range (+12 dB; up to link version 18, 0 dB); Load, Store and Reset never while sound streams and only after a fresh read. The app has checks of its own, but the helper doesn't trust them.
 - **MIDI apps can't reach the control cable.** MIDI goes to cable 0 only, and SysEx addressed to the UA-101 is dropped.
 - **Clock:** the unit sets the pace (implicit feedback). Its clock was measured about 120 ppm slow at 48 kHz on the unit tested; the plug-in corrects this so apps see the nominal rate, adding about 0.6 ms each way.
 - **Channels:** 12 in and 10 out up to 96 kHz, 6 and 6 at 192 kHz. The rate is the knob on the unit. Full-Speed USB is not supported.

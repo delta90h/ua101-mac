@@ -238,7 +238,8 @@ struct PutBackPlan: Equatable {
     }
     /// The settings a put back changes: the ones that differ now. One message each.
     var changes: [Change] = []
-    /// Volumes the backup holds above 0 dB: the app puts 0 dB there, and says so.
+    /// Volumes the backup holds above the ceiling (since 2026-11-27 the top of the unit's range,
+    /// so none from a backup this app can read): the app puts the ceiling there, and says so.
     var held: [String] = []
     /// What differs and can't be put back: the switches on the box, and bytes that aren't
     /// settings this app changes.

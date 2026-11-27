@@ -13,7 +13,7 @@
  *  - One last check sits on the way out (the guard): every message is read
  *    back and classed, whatever code built it, and refused if not allowed.
  *  - The mixer is refused while Soft Control is out, as Roland's app does.
- *  - Volume is held at 0 dB unless the ceiling is raised.
+ *  - Volume is held at the ceiling: the whole range unless it is lowered.
  *  - Every change is checked: after a quiet moment the block is read again
  *    and compared. The unit's answer wins and a disagreement is reported.
  *  - A drag pauses the unit's saving and resumes it at the end.

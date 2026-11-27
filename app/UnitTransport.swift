@@ -5,7 +5,7 @@
 // helper also wanted the user's go-ahead files; since version 18 there are
 // none (src/ua101_link.h). The list, since link version 14: pausing and resuming the
 // unit's saving, the patch bay sources, of every channel of the mixer the
-// volume up to 0 dB, the pan from 0x0000 to 0x8000 (MONITOR OUT has none) and
+// volume up to +12 dB, the pan from 0x0000 to 0x8000 (MONITOR OUT has none) and
 // the on/off bit, 0 or 1, of every pair the stereo link, 0 or 1, and of the
 // INPUT and the OUTPUT group the solo, 0 for none or a channel 1 to 10.
 // "Reset Mixer" and "Open Backup" are made of those same messages
@@ -24,7 +24,7 @@ struct Allowed: Equatable {
     var saving = false
     /// The output pairs, 0 to 4, whose patch bay source may be changed.
     var patchOutputs: Set<Int> = []
-    /// The channels whose volume may be changed, to any value up to 0 dB (`panel_volume_sendable`).
+    /// The channels whose volume may be changed, to any value up to +12 dB (`panel_volume_sendable`).
     var volumes: Set<StripID> = []
     /// The channels whose pan may be changed, to any value from 0x0000 to 0x8000 (`panel_pan_sendable`).
     var pans: Set<StripID> = []
@@ -170,12 +170,12 @@ struct Allowed: Equatable {
     }
 
     /// For a sentence: "the unit's saving (paused and resumed, Device menu), the patch bay
-    /// (Patch Bay window), the volume of INPUT 1 (up to 0 dB) and the pan of INPUT 1".
+    /// (Patch Bay window), the volume of INPUT 1 (up to +12 dB) and the pan of INPUT 1".
     var words: String {
         var parts: [String] = []
         if saving { parts.append("the unit's saving (paused and resumed, Device menu)") }
         if let p = patchWords { parts.append(p + " (Patch Bay window)") }
-        if !volumes.isEmpty { parts.append("the volume of \(volumeNames) (up to 0 dB)") }
+        if !volumes.isEmpty { parts.append("the volume of \(volumeNames) (up to +12 dB)") }
         if !pans.isEmpty { parts.append("the pan of \(panNames)") }
         if !ons.isEmpty { parts.append("the mute of \(onNames)") }
         if !links.isEmpty { parts.append("the stereo link of \(linkNames)") }

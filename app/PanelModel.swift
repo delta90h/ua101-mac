@@ -1054,9 +1054,9 @@ final class PanelModel: ObservableObject {
         return StripID(group: s.group, channel: s.channel ^ 1)
     }
 
-    /// One channel's volume. The UA-101 is sent any value up to 0 dB as it is (the helper
-    /// passes on no higher one; the ceiling holds a higher one at 0 dB); with `exact` a value
-    /// above 0 dB is refused instead of held. The change and what the settings read back as
+    /// One channel's volume. The UA-101 is sent any value up to the top of its range
+    /// (0x7FFFFF, about +12 dB) as it is (the helper passes on no higher one; up to
+    /// 2026-11-27 the top was 0 dB); with `exact` a value above that is refused instead of held. The change and what the settings read back as
     /// afterwards are noted and written to the record, as for the patch bay. In a linked pair
     /// both channels' messages must be ones the helper passes on, or nothing is sent.
     @discardableResult
@@ -1067,9 +1067,9 @@ final class PanelModel: ObservableObject {
             return Int32(PANEL_ERR_READ_ONLY)
         }
         let v = min(volume, UInt32(PANEL_MAX_VOLUME))
-        if !transport.isPretend, exact, panel_volume_sendable(v) == 0 {
+        if !transport.isPretend, exact, panel_volume_sendable(volume) == 0 {
             refusal = Refusal(kind: .value, what: what,
-                              text: "\(what) to \(Self.volumeWords(v)): not done. The UA-101 is never sent a volume above 0 dB. Nothing was sent.")
+                              text: "\(what) to \(Self.volumeWords(volume)): not done. The UA-101 is never sent a volume above the top of its range (+12 dB). Nothing was sent.")
             afterCall()
             return Int32(PANEL_ERR_VALUE)
         }
@@ -2244,7 +2244,7 @@ final class PanelModel: ObservableObject {
         }
         if !loud.isEmpty {
             let names = loud.prefix(6).map { "\(ChannelNames.full($0)) \(Format.dB(SettingsBackup.value(block, Int32(PANEL_F_VOLUME), $0.group, $0.channel))) dB" }.joined(separator: ", ")
-            out += "Volumes above 0 dB are in use now: \(names)\(loud.count > 6 ? ", and \(loud.count - 6) more" : ""). This app never sends more than 0 dB: moving such a fader, or a put back, brings it to 0 dB or below. "
+            out += "Volumes above 0 dB are in use now: \(names)\(loud.count > 6 ? ", and \(loud.count - 6) more" : ""). Keep the monitors down until you have looked. "
         }
         let thru = (0..<5).filter { (2...6).contains(Int(SettingsBackup.value(block, Int32(PANEL_F_PATCH), 0, $0))) }
         if !thru.isEmpty {
@@ -2394,7 +2394,7 @@ final class PanelModel: ObservableObject {
                 ? "The Save left the settings in use as they were, all 256 bytes. What \(name) holds now can be seen by recalling it. "
                 : "THE SAVE CHANGED THE SETTINGS IN USE in \(j.storeChanged.count) byte\(j.storeChanged.count == 1 ? "" : "s"), which it should not do (the first: d[\(j.storeChanged[0])]). "
             let plan = j.plan ?? PutBackPlan()
-            if !plan.held.isEmpty { text += "Held at 0 dB in the memory: " + plan.held.joined(separator: " ") + " " }
+            if !plan.held.isEmpty { text += "Held in the memory: " + plan.held.joined(separator: " ") + " " }
             if !plan.cantPutBack.isEmpty { text += "Not in the memory as the file has it: " + plan.cantPutBack.joined(separator: " ") + " " }
         } else {
             text += "NOT SAVED: \(j.failed ?? "the Save wasn't sent"). \(name) is as it was. "
@@ -2903,6 +2903,8 @@ final class PanelModel: ObservableObject {
             target = d < FaderScale.bottomDB ? 0 : FaderScale.volume(dB: min(d, FaderScale.topDB))
         }
         if abs(panel_volume_db(target)) < 0.01 { target = UInt32(PANEL_UNITY_VOLUME) }
+        // From below 0 dB a step up stops at 0 dB, as the fader does; the next step goes on.
+        if ch.volume < UInt32(PANEL_UNITY_VOLUME) && target > UInt32(PANEL_UNITY_VOLUME) { target = UInt32(PANEL_UNITY_VOLUME) }
         keyChange(pauses: dragPauses(volume: s)) { self.setVolume(s, target) }
     }
 

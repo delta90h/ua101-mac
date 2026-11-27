@@ -20,7 +20,7 @@ void ua101_eng_default_config(ua101_eng_config *cfg)
     cfg->memory_settle_us = 500000;
     cfg->ticket_life_us = 30000000;
     cfg->lost_reply_us = 10000000;
-    cfg->volume_ceiling = UA101_CTL_UNITY_VOLUME;
+    cfg->volume_ceiling = UA101_MAX_VOLUME; /* the whole range (up to 0 dB until 2026-11-27) */
     cfg->on_bit_is_mute = 1;
 }
 

@@ -204,6 +204,11 @@
  *      ctl_goahead and the answers ctl_writes, ctl_stale, ctl_memory and ctl_memory_stale are
  *      gone; ctl_open still names what this helper passes on. Nothing changed for the plug-in
  *      or the MIDI plug-in but the number (2026-11-21).
+ *  19  a volume up to the top of the unit's range, 0x7FFFFF (about +12 dB), is passed on: the
+ *      user's choice of 2026-11-27, for faders that go above 0 dB. The two value checks of
+ *      volume_change_passes stay, now at 0x7FFFFF (the parser's number, and the first of the
+ *      six digits at most 7). Nothing else changed, and nothing for the plug-in or the MIDI
+ *      plug-in but the number.
  * A later version that adds a control adds it to ua101_service_passes and UA101_CTL_PASS_.
  *
  * The plug-in calls the functions below, implemented with XPC in src/plugin/ua101_link_xpc.c,
@@ -218,7 +223,7 @@
 #include "ua101_shared.h"
 
 #define UA101_SERVICE_NAME "io.github.delta90h.ua101d"
-#define UA101_LINK_VERSION 18
+#define UA101_LINK_VERSION 19
 
 /* Where the user's two go-ahead files were up to version 17 (see above). No program looks for
    them any more; the control app's report names one that is still there, and
@@ -308,8 +313,9 @@
 /* The channels whose volume this helper passes on, a bit each, numbered as above:
    every channel of the mixer (bits 0 to 21). */
 #define UA101_VOLUMES_PASSED 0x3FFFFFu
-/* The highest volume ever passed on: 0 dB. */
-#define UA101_VOLUME_PASSED_MAX 0x200000u
+/* The highest volume ever passed on: the top of the unit's range, about +12 dB (up to
+   version 18: 0x200000, 0 dB). */
+#define UA101_VOLUME_PASSED_MAX 0x7FFFFFu
 /* The channels whose pan this helper passes on, a bit each, numbered as above:
    INPUT 1 to 10 and OUTPUT 1 to 10 (bits 2 to 21); MONITOR OUT has no pan. */
 #define UA101_PANS_PASSED 0x3FFFFCu

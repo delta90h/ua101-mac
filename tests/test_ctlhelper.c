@@ -389,12 +389,16 @@ static void hand_volume(uint8_t out[18], unsigned a1, unsigned a2, unsigned a3, 
     out[17] = 0xF7;
 }
 
+/* The highest volume passed on since link version 19: the top of the unit's range, about
+   +12 dB (up to version 18, 0x200000: 0 dB). */
+#define T_VOLUME_TOP 0x7FFFFFu
+
 /* The test's own reading of the rule, written a third way: the six digits, first sent first,
-   compared one by one with those of 0 dB (2 0 0 0 0 0), as words are put in order. 1 if the
-   value comes before 0 dB or is it. */
-static int volume_at_most_0db(uint32_t value)
+   compared one by one with those of the top (7 F F F F F), as words are put in order. 1 if the
+   value comes before the top or is it. */
+static int volume_at_most_top(uint32_t value)
 {
-    static const unsigned top[6] = {2, 0, 0, 0, 0, 0};
+    static const unsigned top[6] = {7, 15, 15, 15, 15, 15};
     unsigned i, digit;
 
     if (value > 0xFFFFFFu)
@@ -407,7 +411,8 @@ static int volume_at_most_0db(uint32_t value)
     return 1;
 }
 
-/* 1 only for a volume change link version 13 passes on: a channel of t_volume, at most 0 dB. */
+/* 1 only for a volume change this link version passes on: a channel of t_volume, at most the
+   top (0 dB up to version 18). */
 static int is_passed_volume(const uint8_t *msg, size_t len)
 {
     uint8_t want[18];
@@ -419,7 +424,7 @@ static int is_passed_volume(const uint8_t *msg, size_t len)
     for (i = 0; i < 6; i++)
         value = (value << 4) | (msg[10 + i] & 0xFu);
     hand_volume(want, msg[7], msg[8], 0x07, value);
-    return memcmp(msg, want, 18) == 0 && volume_at_most_0db(value);
+    return memcmp(msg, want, 18) == 0 && volume_at_most_top(value);
 }
 
 /* The pan message for one channel, from the app's builder. */
@@ -1285,8 +1290,9 @@ static int send_everything(app *a, int saving)
         for (i = 0; i < sizeof(near) / sizeof(near[0]); i++)
             sent += send_raw(a, near[i], sizeof(near[i]));
     }
-    /* The volume change's neighbours: INPUT 1 one step above 0 dB, at the top of the unit's
-       range, and at three more values above 0 dB; the same harmless value for three channels
+    /* The volume change's neighbours: INPUT 1 one step past the top of the unit's range
+       (0x7FFFFF, about +12 dB), and four more values past it (since link version 19 a volume
+       above 0 dB up to the top passes); the same harmless value for three channels
        the mixer doesn't have (an INPUT 11, an OUTPUT 11, a third MONITOR OUT); INPUT 1's pan
        address; a wrong checksum, another device ID, a request in place of a set, and a digit
        that isn't one. */
@@ -1294,11 +1300,11 @@ static int send_everything(app *a, int saving)
         uint8_t v[UA101_VOLUME_NEAR][18];
         unsigned i;
 
-        hand_volume(v[0], 0x04, 0x00, 0x07, 0x200001u);
-        hand_volume(v[1], 0x04, 0x00, 0x07, 0x7FFFFFu);
-        hand_volume(v[2], 0x04, 0x00, 0x07, 0x200010u);
+        hand_volume(v[0], 0x04, 0x00, 0x07, 0x800000u);
+        hand_volume(v[1], 0x04, 0x00, 0x07, 0x800001u);
+        hand_volume(v[2], 0x04, 0x00, 0x07, 0x900000u);
         hand_volume(v[3], 0x04, 0x00, 0x07, 0xFFFFFFu);
-        hand_volume(v[4], 0x04, 0x00, 0x07, 0x210000u);
+        hand_volume(v[4], 0x04, 0x00, 0x07, 0x8F0000u);
         hand_volume(v[5], 0x04, 0x0A, 0x07, 0x100001u);
         hand_volume(v[6], 0x05, 0x0A, 0x07, 0x100001u);
         hand_volume(v[7], 0x03, 0x02, 0x07, 0x100001u);
@@ -1488,7 +1494,7 @@ static void test_helper_refuses(app *a)
    helper, without the go-ahead, refused its volume change. Since version 18 every setting the
    engine can name is passed on within its range, so the helper's refusal of what the engine
    can't make, and the engine's answer to it, is shown with a message made by hand: test_patch,
-   INPUT 1 one step above 0 dB.) */
+   INPUT 1 one step past the top of the range.) */
 
 static const char *g_log_path;
 
@@ -1720,8 +1726,13 @@ static void test_rules(void)
               "both pass");
         CHECK(!ua101_service_passes(first, 17, &why), "nor cut off");
         hand_volume(v, 0x04, 0x00, 0x07, 0x200001u);
-        CHECK(!ua101_service_passes(v, 18, &why) && strstr(why, "above 0 dB") != NULL,
-              "one step above 0 dB: refused, and the reason says so (%s)", why);
+        hand_volume(shim, 0x04, 0x00, 0x07, T_VOLUME_TOP);
+        CHECK(ua101_service_passes(v, 18, &why) && ua101_service_passes(shim, 18, &why),
+              "since link version 19, one step above 0 dB and the top of the range (0x7FFFFF, "
+              "about +12 dB) pass");
+        hand_volume(v, 0x04, 0x00, 0x07, T_VOLUME_TOP + 1u);
+        CHECK(!ua101_service_passes(v, 18, &why) && strstr(why, "not sent") != NULL,
+              "one step past the top: refused, and the reason says nothing was sent (%s)", why);
         CHECK(strstr(why, "order") == NULL, "and the reason no longer speaks of other orders of the digits");
         hand_volume(v, 0x04, 0x00, 0x07, 0x16A09Eu);
         panel_volume_message(1, 0, 0x16A09Eu, shim);
@@ -1738,19 +1749,19 @@ static void test_rules(void)
 
         /* Every value six digits can spell, 16,777,216 of them, for INPUT 1. */
         for (value = 0; value <= 0xFFFFFFu; value++) {
-            int want = volume_at_most_0db(value), got;
+            int want = volume_at_most_top(value), got;
 
             hand_volume(v, 0x04, 0x00, 0x07, value);
             got = ua101_service_passes(v, 18, &why);
             wrong += got != want;
-            above += got && value > 0x200000u;
+            above += got && value > T_VOLUME_TOP;
             safe += (uint32_t)got;
             app_differs += (panel_volume_message_channel(v, 18) == 2) != got ||
                            (panel_volume_sendable(value) != 0) != got;
         }
-        CHECK(above == 0, "of all 16,777,216 values for INPUT 1, none above 0 dB passes (%u)", above);
-        CHECK(wrong == 0 && safe == 0x200001u,
-              "exactly the %u from 0x000000 to 0x200000 pass, every one of them (%u wrong)", safe,
+        CHECK(above == 0, "of all 16,777,216 values for INPUT 1, none past the top (0x7FFFFF) passes (%u)", above);
+        CHECK(wrong == 0 && safe == T_VOLUME_TOP + 1u,
+              "exactly the %u from 0x000000 to 0x7FFFFF pass, every one of them (%u wrong)", safe,
               wrong);
         CHECK(app_differs == 0, "the app's own rule picks the same values (%u differ)", app_differs);
         for (value = 0; value <= 0x7Fu; value++) /* a digit that is more than a digit */
@@ -1777,13 +1788,15 @@ static void test_rules(void)
                 }
             }
         CHECK(ok == count, "of every channel's volume only the passed channels' pass (%u of %u right)", ok, count);
-        CHECK(UA101_VOLUMES_PASSED == T_VOLUME_BITS && UA101_VOLUME_PASSED_MAX == 0x200000u,
-              "this version passes on the volume of the channels the test names, up to 0 dB");
+        CHECK(UA101_VOLUMES_PASSED == T_VOLUME_BITS && UA101_VOLUME_PASSED_MAX == T_VOLUME_TOP,
+              "this version passes on the volume of the channels the test names, up to the top "
+              "of the range (about +12 dB)");
         /* Every channel there is and isn't, with values all along the six digits (every 257th,
-           and the ones around 0 dB): at most 0 dB for a passed channel, nothing for another. */
+           and the ones around 0 dB and the top): at most the top for a passed channel, nothing
+           for another. */
         {
-            static const uint32_t edge[8] = {0x1FFFFFu, 0x200000u, 0x200001u, 0x200010u,
-                                             0x210000u, 0x7FFFFFu, 0x800000u, 0xFFFFFFu};
+            static const uint32_t edge[8] = {0x1FFFFFu, 0x200000u, 0x200001u, 0x7FFFFEu,
+                                             0x7FFFFFu, 0x800000u, 0x800001u, 0xFFFFFFu};
             uint32_t bad = 0, over = 0, tried = 0;
 
             for (group = 0; group < 3; group++)
@@ -1793,8 +1806,8 @@ static void test_rules(void)
 
                         hand_volume(v, 3 + group, channel, 0x07, value);
                         got = ua101_service_passes(v, 18, &why);
-                        bad += got != (t_volume(group, channel) && volume_at_most_0db(value));
-                        over += got && value > 0x200000u;
+                        bad += got != (t_volume(group, channel) && volume_at_most_top(value));
+                        over += got && value > T_VOLUME_TOP;
                         tried++;
                     }
                     for (b = 0; b < 8; b++) {
@@ -1802,14 +1815,14 @@ static void test_rules(void)
 
                         hand_volume(v, 3 + group, channel, 0x07, edge[b]);
                         got = ua101_service_passes(v, 18, &why);
-                        bad += got != (t_volume(group, channel) && edge[b] <= 0x200000u);
-                        over += got && edge[b] > 0x200000u;
+                        bad += got != (t_volume(group, channel) && edge[b] <= T_VOLUME_TOP);
+                        over += got && edge[b] > T_VOLUME_TOP;
                         tried++;
                     }
                 }
-            CHECK(over == 0, "of %u volumes over all 48 channel addresses, none above 0 dB passes (%u)",
+            CHECK(over == 0, "of %u volumes over all 48 channel addresses, none past the top passes (%u)",
                   tried, over);
-            CHECK(bad == 0, "and exactly those at most 0 dB of a passed channel pass (%u wrong)", bad);
+            CHECK(bad == 0, "and exactly those at most the top of a passed channel pass (%u wrong)", bad);
         }
         /* Each of the helper's checks alone (this test's build can leave one out): the two
            value checks and the two channel checks. The parser already stops a volume above
@@ -1835,20 +1848,20 @@ static void test_rules(void)
                     m.field.index = 0;
                     hand_volume(v, 0x04, 0x00, 0x07, value);
                     got = ua101_service_passes(v, 18, &why);
-                    bad += got != volume_at_most_0db(value);
+                    bad += got != volume_at_most_top(value);
                     passed += (uint32_t)got;
                     got = ua101_service_test_volume(v, 18, &m);
-                    bad += got != (value <= 0x200000u ? 1 : -1);
+                    bad += got != (value <= T_VOLUME_TOP ? 1 : -1);
                     direct += got == 1;
                 }
-                for (value = 0x1FFFF0u; value <= 0x200010u; value++) { /* and around 0 dB, every one */
+                for (value = 0x7FFFF0u; value <= 0x800010u; value++) { /* and around the top, every one */
                     ua101_msg m = {.kind = UA101_MSG_FIELD, .value = value};
 
                     m.field.kind = UA101_F_VOLUME;
                     m.field.group = 1;
                     hand_volume(v, 0x04, 0x00, 0x07, value);
-                    bad += ua101_service_passes(v, 18, &why) != (value <= 0x200000u);
-                    bad += ua101_service_test_volume(v, 18, &m) != (value <= 0x200000u ? 1 : -1);
+                    bad += ua101_service_passes(v, 18, &why) != (value <= T_VOLUME_TOP);
+                    bad += ua101_service_test_volume(v, 18, &m) != (value <= T_VOLUME_TOP ? 1 : -1);
                 }
                 for (group = 0; group < 3; group++)
                     for (channel = 0; channel < 16; channel++) {
@@ -1864,8 +1877,8 @@ static void test_rules(void)
                         bad += ua101_service_test_volume(v, 18, &m) != t_volume(group, channel);
                     }
                 ua101_service_test_skip = 0;
-                CHECK(bad == 0 && passed == 0x200000u / 7u + 1u && direct == passed,
-                      "%s alone: exactly the values up to 0 dB pass for INPUT 1, also past the "
+                CHECK(bad == 0 && passed == T_VOLUME_TOP / 7u + 1u && direct == passed,
+                      "%s alone: exactly the values up to the top pass for INPUT 1, also past the "
                       "parser, and no channel's volume but a passed one's (%u wrong)", alone[k], bad);
             }
         }
@@ -3085,19 +3098,20 @@ static void test_patch(app *a)
 
     /* A refusal. Up to version 13 this was the engine let loose on
        the link of INPUT 1-2; since version 14 every setting the engine can name is passed on
-       within its range, and the engine itself holds a volume at 0 dB. So the message is made
-       by hand: INPUT 1 one step above 0 dB. The helper refuses it, and the app's answer to a
+       within its range, and the engine itself makes no volume past the top of the range. So
+       the message is made by hand: INPUT 1 one step past the top (0x800000; up to version 18,
+       one step above 0 dB). The helper refuses it, and the app's answer to a
        refusal (read-only again, read the unit) leaves the engine showing what the unit has. */
     refused = atomic_load(&a->refused);
     CHECK(sim_value(UA101_F_VOLUME, 1, 0) == UA101_CTL_UNITY_VOLUME, "the pretend unit has INPUT 1 at 0 dB, as the real one reads");
     {
         uint8_t over[18];
 
-        hand_volume(over, 0x04, 0x00, 0x07, 0x200001u);
+        hand_volume(over, 0x04, 0x00, 0x07, 0x800000u);
         send_raw(a, over, 18);
     }
-    CHECK(WAIT(atomic_load(&a->refused) == refused + 1, 3.0) && strstr(refused_why(a), "above 0 dB") != NULL,
-          "INPUT 1 to 0x200001, by hand: the helper refuses it (%s)", refused_why(a));
+    CHECK(WAIT(atomic_load(&a->refused) == refused + 1, 3.0) && strstr(refused_why(a), "not sent") != NULL,
+          "INPUT 1 to 0x800000, by hand: the helper refuses it (%s)", refused_why(a));
     on_app(^{
       blocks = panel_blocks_received(a->engine);
       panel_writes_refused(a->engine, now_us());
@@ -3135,7 +3149,7 @@ static int volume_reaches(app *a, unsigned group, unsigned channel, uint32_t val
 }
 
 /* Link version 8: INPUT 1's volume at any value up to 0 dB, never above,
-   and no other channel's. */
+   and no other channel's. Since version 19 up to the top of the range (about +12 dB). */
 static void test_volume(app *a)
 {
     int volume = atomic_load(&P.wire_volume), saving = atomic_load(&P.wire_saving);
@@ -3159,10 +3173,16 @@ static void test_volume(app *a)
               volume_reaches(a, 1, 0, 0x200000u) && WAIT(sim_value(UA101_F_VOLUME, 1, 0) == 0x200000u, 3.0) &&
               counts().ctl_changes == changes + 6 && atomic_load(&P.wire_volume) == volume + 6,
           "three values version 7 refused (0x1F0000, 0x00000F, 0x16A09E) reach the unit, and 0 dB again");
-    volume += 4;
-    CHECK(!volume_reaches(a, 1, 0, 0x200001u) && !volume_reaches(a, 1, 0, 0x7FFFFFu) &&
-              !volume_reaches(a, 1, 0, 0x200010u) && !volume_reaches(a, 1, 0, 0xFFFFFFu),
-          "INPUT 1 above 0 dB: refused");
+    CHECK(volume_reaches(a, 1, 0, 0x200001u) && WAIT(sim_value(UA101_F_VOLUME, 1, 0) == 0x200001u, 3.0) &&
+              volume_reaches(a, 1, 0, T_VOLUME_TOP) && WAIT(sim_value(UA101_F_VOLUME, 1, 0) == T_VOLUME_TOP, 3.0) &&
+              volume_reaches(a, 1, 0, 0x200000u) && WAIT(sim_value(UA101_F_VOLUME, 1, 0) == 0x200000u, 3.0) &&
+              counts().ctl_changes == changes + 9 && atomic_load(&P.wire_volume) == volume + 9,
+          "since version 19 above 0 dB too: one step above (0x200001) and the top of the range "
+          "(0x7FFFFF, about +12 dB) reach the unit, and 0 dB again");
+    volume += 7;
+    CHECK(!volume_reaches(a, 1, 0, 0x800000u) && !volume_reaches(a, 1, 0, 0x800010u) &&
+              !volume_reaches(a, 1, 0, 0x900000u) && !volume_reaches(a, 1, 0, 0xFFFFFFu),
+          "INPUT 1 past the top of the range: refused");
     CHECK(!volume_reaches(a, 1, 10, 0x100001u) && !volume_reaches(a, 2, 10, 0x100001u) &&
               !volume_reaches(a, 0, 2, 0x100001u) && !volume_reaches(a, 3, 0, 0),
           "an INPUT 11, an OUTPUT 11, a third MONITOR OUT and a fourth group, none of which "
@@ -3625,8 +3645,8 @@ static void test_all_channels(app *a)
             else if (want_volume) {
                 pace();
                 wrong += !WAIT(sim_value(UA101_F_VOLUME, group, channel) == 0x100001u, 3.0);
-                wrong += (unsigned)volume_reaches(a, group, channel, 0x200001u);
-                wrong += (unsigned)volume_reaches(a, group, channel, 0x7FFFFFu);
+                wrong += (unsigned)volume_reaches(a, group, channel, 0x800000u);
+                wrong += (unsigned)volume_reaches(a, group, channel, 0xFFFFFFu);
                 wrong += !volume_reaches(a, group, channel, 0x200000u);
                 pace();
                 wrong += !WAIT(sim_value(UA101_F_VOLUME, group, channel) == 0x200000u, 3.0);
@@ -3668,7 +3688,7 @@ static void test_all_channels(app *a)
         }
     CHECK(wrong == 0 && passed == T_VOLUMES + T_PANS + T_ONS,
           "over 48 channel addresses: the %u volumes, pans and on/offs of the passed "
-          "channels reach the unit and go back, none above 0 dB, none past a pan's end, no byte "
+          "channels reach the unit and go back, none past the top of the range, none past a pan's end, no byte "
           "2; nothing else does (%u wrong)", passed, wrong);
     CHECK(atomic_load(&P.wire_volume) == volume + 2 * T_VOLUMES && atomic_load(&P.wire_pan) == pan + 2 * T_PANS &&
               atomic_load(&P.wire_on) == on + 2 * T_ONS &&
@@ -5888,7 +5908,7 @@ int main(void)
               atomic_load(&P.wire_other) == 0,
           "in the whole run, every message on the cable was the settings request (%d) or "
           "a pause or resume of saving (%d), a patch bay source (%d), a passed "
-          "channel's volume at a value that is at most 0 dB (%d), a passed channel's pan from "
+          "channel's volume at a value that is at most the top of the range (%d), a passed channel's pan from "
           "0x0000 to 0x8000 (%d), a passed channel's on/off, 0 or 1 (%d), a passed pair's link, "
           "0 or 1 (%d), a passed group's solo, 0 to 10 (%d), or one of the "
           "37 Load, Store and Reset messages (%d), of %d",

@@ -3,7 +3,7 @@
 // behind it in place of the real one. Like the real helper it passes on the
 // request for the settings always; a pause and a resume of the unit's saving,
 // the patch bay source of an output pair, and the volume (a value at most
-// 0 dB), the pan (0x0000 to 0x8000) and the on/off bit (0 or 1) of the mixer's
+// 0x7FFFFF, about +12 dB; up to link version 18, 0 dB), the pan (0x0000 to 0x8000) and the on/off bit (0 or 1) of the mixer's
 // channels, the stereo link (0 or 1) of its pairs and the solo (0 to 10) of
 // the INPUT and the OUTPUT group
 // (link version 14: every channel, every pair, both groups; MONITOR OUT has no
@@ -190,7 +190,7 @@ final class FakeHelper: HelperLink {
             || (switchOf >= 0 && allowed.ons.contains(Allowed.volumeStrips[switchOf]))
             || (pair >= 0 && allowed.links.contains(pair))
             || (soloOf >= 0 && allowed.solos.contains(soloOf))
-        var why = "this helper passes on seven changes only: pausing and resuming the unit's saving, the patch bay source of an output pair, the volume (up to 0 dB), the pan and the on/off (0 or 1) of a mixer channel, the stereo link (0 or 1) of a pair, and the solo of the INPUT or the OUTPUT group (0 for none, or a channel 1 to 10); the message was not sent"
+        var why = "this helper passes on seven changes only: pausing and resuming the unit's saving, the patch bay source of an output pair, the volume (up to +12 dB), the pan and the on/off (0 or 1) of a mixer channel, the stereo link (0 or 1) of a pair, and the solo of the INPUT or the OUTPUT group (0 for none, or a channel 1 to 10); the message was not sent"
         // Load, Store and Reset go by rules of their own.
         let command = panel_memory_message_bit(bytes.baseAddress, bytes.count)
         var memoryPasses = false

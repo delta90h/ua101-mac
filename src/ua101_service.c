@@ -702,7 +702,7 @@ static int open_port(char *why, size_t why_bytes)
     say("MIDI interface open. From a control app these are passed on: the settings request, "
         "\"pause saving\", \"resume saving\", the patch bay sources, "
         "and of the mixer's channels (MONITOR OUT, INPUT 1 to 10, OUTPUT 1 to 10) the volume up "
-        "to 0 dB, the pan (0x0000 to 0x8000) and the on/off (0 or 1), of its pairs the stereo "
+        "to +12 dB, the pan (0x0000 to 0x8000) and the on/off (0 or 1), of its pairs the stereo "
         "link (0 or 1), and of the INPUT and the OUTPUT group the solo (0 for none, or a "
         "channel 1 to 10); also "
         "Load and Store of Memory 1 to 5 and Reset (the settings in use, a memory, or "
@@ -983,20 +983,12 @@ uint64_t ua101_service_test_clock_us;
 #endif
 
 /* 1 if the six digits, the first one sent being the highest (proven on the unit, 2026-11-12:
-  ), spell a volume that is at most 0 dB (0x200000): the first digit is 0 or
-   1, or it is 2 and the other five are all 0. */
+  ), spell a volume that is at most the top of the unit's range (0x7FFFFF, about +12 dB):
+   the first digit is at most 7 (the caller has seen that each digit is 0 to F). Up to link
+   version 18 the top was 0 dB (0x200000). */
 static int volume_digits_ok(const uint8_t d[6])
 {
-    unsigned i;
-
-    if (d[0] < 2)
-        return 1;
-    if (d[0] > 2)
-        return 0;
-    for (i = 1; i < 6; i++)
-        if (d[i] != 0)
-            return 0;
-    return 1;
+    return d[0] <= 7;
 }
 
 /* A volume change this version passes on, judged twice without shared code, as the patch
@@ -1004,7 +996,7 @@ static int volume_digits_ok(const uint8_t d[6])
    docs/control-protocol.md gives them (F0 41 10 00 69 12, address 00 <group+3> <channel> 07,
    six digits each 0 to F, the checksum, F7). The channel must be one of UA101_VOLUMES_PASSED:
    the first check takes the parser's field, the second bytes 7 and 8. The value must be at
-   most 0 dB, the first digit sent being the highest: the first check takes the parser's
+   most UA101_VOLUME_PASSED_MAX (about +12 dB), the first digit sent being the highest: the first check takes the parser's
    number, the second the digits one by one. The order of the digits is proven on the unit for
    INPUT 1 (2026-11-12); the other channels' volumes lie in the block in the same six digits
    (docs/control-protocol.md), and each is tried on the unit by the user before it is used
@@ -1681,7 +1673,8 @@ int ua101_service_passes(const uint8_t *msg, size_t len, const char **why)
               patch_change_passes(msg, len, &m))) {
             volume = volume_change_passes(msg, len, &m);
             if (volume < 0) {
-                *why = "a volume above 0 dB is never passed on; the message was not sent";
+                *why = "a volume above the top of the unit's range (0x7FFFFF, about +12 dB) is never "
+                       "passed on; the message was not sent";
                 return 0;
             }
             pan = volume == 0 ? pan_change_passes(msg, len, &m) : 0;
@@ -1697,7 +1690,7 @@ int ua101_service_passes(const uint8_t *msg, size_t len, const char **why)
             if (volume == 0 && pan == 0 && on == 0 && link == 0 && solo == 0) {
                 *why = "this helper passes on seven changes only: pausing and resuming the "
                        "unit's saving, the patch bay source of an output pair, the volume "
-                       "(up to 0 dB), the pan and the on/off (0 or 1) of a mixer channel, the "
+                       "(up to +12 dB), the pan and the on/off (0 or 1) of a mixer channel, the "
                        "stereo link (0 or 1) of a pair, and the solo of the INPUT or the OUTPUT "
                        "group (0 for none, or a channel 1 to 10); the message was not sent";
                 return 0;
@@ -1722,7 +1715,7 @@ int ua101_service_passes(const uint8_t *msg, size_t len, const char **why)
  * gives out for the MIDI OUT socket, which is cable 0 only). Whatever the app above it believes it may do, it lets through the
  * request for the settings block, "pause saving",
  * "resume saving", the patch bay source of an output pair, and of the mixer's channels the
- * volume up to 0 dB, the pan and the on/off, of its pairs the link, and of the INPUT and the
+ * volume up to +12 dB, the pan and the on/off, of its pairs the link, and of the INPUT and the
  * OUTPUT group the solo (ua101_service_passes); and a Load, a Store or a Reset by the rules
  * of ua101_service_memory_passes. No go-ahead file is looked for (link version 18). Returns a
  * UA101_LINK_ status.

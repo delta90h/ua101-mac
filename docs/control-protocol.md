@@ -70,7 +70,7 @@ They arrive in bursts (up to 7 messages in 377 ms for one release), and old ones
 
 **Groups:** 0 MONITOR OUT (2 channels), 1 INPUT (10; 9-10 are OPTICAL IN), 2 OUTPUT from the computer (10).
 
-**Volume:** gain is `value / 0x200000`: `0x200000` is 0 dB, `0` silence, `0x7FFFFF` about +12 dB. The helper never passes on more than 0 dB.
+**Volume:** gain is `value / 0x200000`: `0x200000` is 0 dB, `0` silence, `0x7FFFFF` about +12 dB. The helper passes on the whole range up to `0x7FFFFF` (since link version 19, 2026-11-27; before, never more than 0 dB).
 **Pan:** `0x0000` left, `0x4000` centre, `0x8000` right (confirmed). MONITOR OUT has none.
 
 ## Changing settings (confirmed)

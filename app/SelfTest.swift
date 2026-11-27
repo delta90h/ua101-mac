@@ -173,12 +173,14 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(b.model.snap.setsSent < 40, "only the latest values were sent (\(b.model.snap.setsSent) messages for 40 moves)")
         t.check(b.model.disagreement == nil && !b.model.snap.busy, "checked, no disagreement")
 
-        // The ceiling.
-        t.equal(b.model.setVolume(strip(inp, 3), FaderScale.volume(dB: 6)), Int32(PANEL_CLAMPED), "+6 dB is held")
-        t.equal(b.model.refusal?.kind, .held, "the panel says so")
-        t.equal(b.model.snap.channels[inp][3].volume, unity, "at 0 dB")
+        // Above 0 dB (since 2026-11-27): up to the top of the range, as it is.
+        let plus6 = FaderScale.volume(dB: 6)
+        t.equal(b.model.setVolume(strip(inp, 3), plus6), Int32(PANEL_OK), "+6 dB goes as it is")
+        t.check(b.model.refusal == nil && b.model.snap.channels[inp][3].volume == plus6, "nothing held, and the panel shows +6 dB")
         b.settle()
-        t.equal(unitValue(b, Int32(PANEL_F_VOLUME), inp, 3), unity, "the unit has 0 dB")
+        t.equal(unitValue(b, Int32(PANEL_F_VOLUME), inp, 3), plus6, "the unit has +6 dB")
+        b.model.setVolume(strip(inp, 3), unity)
+        b.settle()
 
         // Pan, on/off.
         b.model.setPan(strip(inp, 4), 0x1234)
@@ -290,15 +292,23 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.equal(panel_sim_saving_paused(b.unit.sim), 1, "held keys count as one drag")
         b.model.handle(.volumeDownBig)
         t.equal(Format.dB(b.model.snap.channels[out][2].volume), "−5.0", "a big step: −5.0 dB")
-        for _ in 0..<12 { b.model.handle(.volumeUpBig) }
-        t.equal(b.model.snap.channels[out][2].volume, unity, "up is held at 0 dB")
-        b.model.handle(.volumeDownBig)
+        b.model.handle(.volumeUpBig)
+        b.model.handle(.volumeUpBig)
+        t.equal(b.model.snap.channels[out][2].volume, unity, "up from below stops at 0 dB (−5, −2, then 0, not +1)")
+        b.model.handle(.volumeUpBig)
+        t.equal(Format.dB(b.model.snap.channels[out][2].volume), "+3.0", "the next step goes past it: +3.0 dB")
+        for _ in 0..<6 { b.model.handle(.volumeUpBig) }
+        t.equal(b.model.snap.channels[out][2].volume, FaderScale.volume(dB: 12), "and up to +12 dB, the top, no higher")
+        b.model.handle(.volumeDown)
+        b.model.handle(.volumeUp)
+        t.equal(b.model.snap.channels[out][2].volume, FaderScale.volume(dB: 12), "a step down and up again, above 0 dB: no stop there")
+        for _ in 0..<5 { b.model.handle(.volumeDownBig) }
         b.model.handle(.panRight)
         b.model.handle(.toggleMonitor)
         b.model.handle(.toggleLink)
         b.settle()
         t.equal(panel_sim_saving_paused(b.unit.sim), 0, "saving resumed after the keys went quiet")
-        t.equal(Format.dB(unitValue(b, Int32(PANEL_F_VOLUME), out, 2)), "−3.0", "the unit has −3.0 dB")
+        t.equal(Format.dB(unitValue(b, Int32(PANEL_F_VOLUME), out, 2)), "−3.0", "the unit has −3.0 dB (+12 and five steps of 3 down)")
         t.equal(unitValue(b, Int32(PANEL_F_PAN), out, 2), UInt32(PanelModel.keyPanStep), "pan moved one step right of hard left")
         t.equal(unitValue(b, Int32(PANEL_F_ON), out, 2), 1, "on/off toggled")
         t.equal(unitValue(b, Int32(PANEL_F_LINK), out, 1), 0, "OUTPUT 3-4 unlinked by the key")
@@ -720,9 +730,9 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(volumeSet.withUnsafeBufferPointer { !b.helper.send($0) }, "the transport doesn't take a message that sets something")
         t.equal(b.helper.blocked, 1, "it counts it")
         t.check(b.fake.refused == 0 && b.fake.passedOn == 1, "and the helper never saw it")
-        // INPUT 1's volume one digit above 0 dB (0x300000): the helper never passes that on.
-        let volumeOver: [UInt8] = [0xF0, 0x41, 0x10, 0x00, 0x69, 0x12, 0x00, 0x04, 0x00, 0x07, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x72, 0xF7]
-        t.check(volumeOver.withUnsafeBufferPointer { b.fake.send($0) }, "a volume above 0 dB, handed to the helper directly")
+        // INPUT 1's volume one step past the top of the range (0x800000): the helper never passes that on.
+        let volumeOver: [UInt8] = [0xF0, 0x41, 0x10, 0x00, 0x69, 0x12, 0x00, 0x04, 0x00, 0x07, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6D, 0xF7]
+        t.check(volumeOver.withUnsafeBufferPointer { b.fake.send($0) }, "a volume past the top of the range, handed to the helper directly")
         b.settle()
         t.check(b.fake.refused == 1 && b.helper.helperRefusals == 1, "the helper refuses it and says so")
         t.equal(b.model.refusal?.kind, .helper, "the panel shows that the helper refused")
@@ -1163,25 +1173,29 @@ func runSelfTest(verbose: Bool) -> Int32 {
                 "a volume message is told by its channel")
         t.check(channel(in1, 0x1F0000) == 2 && channel(in1, 0x000007) == 2 && channel(in1, 0x16A09E) == 2 && channel(in1, unity - 1) == 2 && channel(in1, 0) == 2,
                 "at any value up to 0 dB, those link version 7 left out too")
-        t.check(channel(in1, unity + 1) == -1 && channel(in1, 0x200010) == -1 && channel(in1, UInt32(PANEL_MAX_VOLUME)) == -1
+        t.check(channel(in1, unity + 1) == 2 && channel(in1, 0x400000) == 2 && channel(in1, UInt32(PANEL_MAX_VOLUME)) == 2,
+                "since 2026-11-27 above 0 dB too, up to the top of the range (0x7FFFFF, about +12 dB)")
+        // Past the top, made by hand (the builder makes no such message): 0x800000.
+        let pastTop: [UInt8] = [0xF0, 0x41, 0x10, 0x00, 0x69, 0x12, 0x00, 0x04, 0x00, 0x07, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6D, 0xF7]
+        t.check(panel_volume_message_channel(pastTop, 18) == -1
                     && panel_volume_message_channel(PanelModel.patchMessage(output: 0, source: 2), 13) == -1,
-                "but not with a value above 0 dB; nor is any other message")
+                "but not with a value past the top; nor is any other message")
 
-        // The values the UA-101 is sent: every one up to 0 dB, the first digit the highest,
-        // and none above. Worked out here a second way, digit by digit against 2 0 0 0 0 0.
-        func atMost0dB(_ v: UInt32) -> Bool {
+        // The values the UA-101 is sent: every one up to the top, the first digit the highest,
+        // and none above. Worked out here a second way, digit by digit against 7 F F F F F.
+        func atMostTop(_ v: UInt32) -> Bool {
             let d = (0..<6).map { (v >> UInt32(20 - 4 * $0)) & 0xF }
-            return d[0] < 2 || (d[0] == 2 && d[1...].allSatisfy { $0 == 0 })
+            return v <= 0xFFFFFF && d[0] <= 7
         }
         var wrong = 0, good = 0
-        for v in UInt32(0)...(unity + 0x2000) {
+        for v in UInt32(0)...(UInt32(PANEL_MAX_VOLUME) + 0x2000) {
             let ok = panel_volume_sendable(v) != 0
             if ok { good += 1 }
-            if ok != atMost0dB(v) { wrong += 1 }
+            if ok != atMostTop(v) { wrong += 1 }
         }
-        t.check(wrong == 0 && good == Int(unity) + 1, "every value from silence to 0 dB is one the UA-101 is sent, \(good) of them, and none of the next 8,192 (wrong: \(wrong))")
-        t.check(panel_volume_sendable(UInt32(PANEL_MAX_VOLUME)) == 0 && panel_volume_sendable(0xFFFFFF) == 0 && panel_volume_sendable(0x210000) == 0,
-                "nor the top of the unit's range, nor 0xFFFFFF")
+        t.check(wrong == 0 && good == Int(PANEL_MAX_VOLUME) + 1, "every value from silence to the top (about +12 dB) is one the UA-101 is sent, \(good) of them, and none of the next 8,192 (wrong: \(wrong))")
+        t.check(panel_volume_sendable(0x800000) == 0 && panel_volume_sendable(0xFFFFFF) == 0 && panel_volume_sendable(0x900000) == 0,
+                "nor one step past the top, nor 0xFFFFFF")
 
         let v8 = Allowed(passes: FakeHelper.version8)
         t.check(v8.saving && v8.allPatch && v8.volumes == [in1] && v8.volume(in1) && !v8.volume(strip(inp, 1)) && !v8.volume(strip(out, 0))
@@ -1203,7 +1217,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(v9.saving && v9.allPatch && v9.volumes == [in1] && v9.pans == [in1] && v9.pan(in1) && !v9.pan(strip(inp, 1)) && !v9.pan(strip(out, 0))
                     && !v9.pan(strip(mon, 0)) && !v9.mixer && v9.someMixer && !v8.pan(in1) && v8.pans.isEmpty,
                 "version 9's answer: as version 8's, and INPUT 1's pan; version 8's has no pan")
-        t.check(v9.words.hasSuffix("the volume of INPUT 1 (up to 0 dB) and the pan of INPUT 1") && !v9.words.contains("in steps") && v9.short.contains("INPUT 1 volume and pan"), "in words: \(v9.words) / \(v9.short)")
+        t.check(v9.words.hasSuffix("the volume of INPUT 1 (up to +12 dB) and the pan of INPUT 1") && !v9.words.contains("in steps") && v9.short.contains("INPUT 1 volume and pan"), "in words: \(v9.words) / \(v9.short)")
         t.check(Allowed(passes: UInt64(PANEL_PASS_PAN)).pans.isEmpty && Allowed(passes: UInt64(PANEL_PASS_PAN_CHANNEL_0) << 2).pans.isEmpty
                     && Allowed(passes: UInt64(PANEL_PASS_PAN) | UInt64(PANEL_PASS_PAN_CHANNEL_0)).pans.isEmpty,
                 "the pan bit without a channel, a channel without the bit, or MONITOR OUT's number, allows no pan")
@@ -1237,8 +1251,8 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.equal(g.model.setVolumeExact(in1, unity), Int32(PANEL_OK), "the same value again")
         g.settle()
         t.check(g.model.volumeNote?.contains("already has that value") == true && g.fake.changes.count == 2, "sends nothing, and says so")
-        t.equal(g.model.setVolumeExact(in1, unity + 1), Int32(PANEL_ERR_VALUE), "an exact value one step above 0 dB: refused")
-        t.check(g.model.refusal?.text.contains("0x200001") == true && g.model.refusal?.text.contains("Nothing was sent") == true, "with a plain sentence: \(g.model.refusal?.text ?? "nil")")
+        t.equal(g.model.setVolumeExact(in1, UInt32(PANEL_MAX_VOLUME) + 1), Int32(PANEL_ERR_VALUE), "an exact value one step past the top of the range: refused")
+        t.check(g.model.refusal?.text.contains("0x800000") == true && g.model.refusal?.text.contains("Nothing was sent") == true, "with a plain sentence: \(g.model.refusal?.text ?? "nil")")
         let minus3 = "F0 41 10 00 69 12 00 04 00 07 01 06 0A 00 09 0E 4D F7"
         t.equal(g.model.setVolumeExact(in1, 0x16A09E), Int32(PANEL_OK), "INPUT 1 to exactly 0x16A09E, about −3 dB, which link version 7 didn't pass on")
         g.settle()
@@ -1306,11 +1320,14 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.equal(g.model.setVolumeExact(in1, unity), Int32(PANEL_OK), "back to 0 dB")
         g.settle()
 
-        // Above 0 dB: held by the engine, and the helper never sees more than 0 dB.
-        t.equal(g.model.setVolume(in1, FaderScale.volume(dB: 6)), Int32(PANEL_CLAMPED), "the fader pushed to +6 dB: held")
+        // Above 0 dB (since 2026-11-27): as it is, and the helper passes it on.
+        t.equal(g.model.setVolume(in1, FaderScale.volume(dB: 6)), Int32(PANEL_OK), "the fader pushed to +6 dB")
         g.settle()
-        t.check(unitValue(g, Int32(PANEL_F_VOLUME), inp, 0, real: true) == unity && g.model.refusal?.kind == .held, "the unit is at 0 dB, and the panel says it was held")
-        t.check(g.fake.changes.allSatisfy { $0.count != 18 || panel_volume_message_channel($0, 18) == 2 }, "every volume that ever left was INPUT 1's, at most 0 dB")
+        t.check(unitValue(g, Int32(PANEL_F_VOLUME), inp, 0, real: true) == FaderScale.volume(dB: 6) && g.model.refusal == nil && g.fake.refused == 0,
+                "the unit is at +6 dB, nothing held or refused")
+        t.check(g.fake.changes.allSatisfy { $0.count != 18 || panel_volume_message_channel($0, 18) == 2 }, "every volume that ever left was INPUT 1's, at most the top of the range")
+        t.equal(g.model.setVolumeExact(in1, unity), Int32(PANEL_OK), "and back to 0 dB")
+        g.settle()
 
         // The keys: a step down, and a step up.
         g.model.cursor = in1
@@ -1350,7 +1367,9 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(g.fake.passedOn == passed && g.fake.refused == 0 && g.helper.blocked == 0 && g.model.guardBlocks == 0,
                 "none of that sent anything, not even a pause for the drags, and no guard had to step in")
         // The transport's own rule, with changes on.
-        let tooHigh = PanelModel.volumeMessage(in1, unity + 1), higher = PanelModel.volumeMessage(in1, 0x200010), input2 = PanelModel.volumeMessage(strip(inp, 1), 0x100001)
+        // Past the top, made by hand (the builder makes none): 0x800000 and 0x900000.
+        let tooHigh = pastTop, higher: [UInt8] = [0xF0, 0x41, 0x10, 0x00, 0x69, 0x12, 0x00, 0x04, 0x00, 0x07, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6C, 0xF7]
+        let input2 = PanelModel.volumeMessage(strip(inp, 1), 0x100001)
         let pan = PanelModel.panMessage(strip(inp, 1), 0x4000)
         var odd = PanelModel.panMessage(in1, 0x8000) // made by hand: 0x8001, one past the end
         odd[13] = 1
@@ -1359,7 +1378,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
                     && input2.withUnsafeBufferPointer { !g.helper.send($0) } && pan.withUnsafeBufferPointer { !g.helper.send($0) }
                     && odd.withUnsafeBufferPointer { !g.helper.send($0) }
                     && g.helper.blocked == 5 && g.fake.refused == 0,
-                "the transport takes no volume above 0 dB, no other channel's, no other channel's pan, and no pan past the far end (0x8001)")
+                "the transport takes no volume past the top of the range, no other channel's, no other channel's pan, and no pan past the far end (0x8001)")
 
         // All five patch rows now, and the presets.
         before = g.fake.changes.count
@@ -1773,7 +1792,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(v13.volumes == Set(all) && v13.ons == Set(all) && v13.pans == Allowed.panStrips && v13.pans.count == 20 && all.count == 22
                     && !v13.pan(strip(mon, 0)) && !v13.pan(strip(mon, 1)) && v13.saving && v13.allPatch && !v13.mixer,
                 "version 13's answer: every channel's volume and on/off, the pan of the 20 that have one, and still no link")
-        t.check(v13.words.hasSuffix("the volume of every channel (up to 0 dB), the pan of every INPUT and OUTPUT channel and the mute of every channel")
+        t.check(v13.words.hasSuffix("the volume of every channel (up to +12 dB), the pan of every INPUT and OUTPUT channel and the mute of every channel")
                     && v13.short == "saving · patch bay · mixer volume, pan, mute", "in words: \(v13.words) / \(v13.short)")
         t.check(Allowed.names([strip(inp, 0), strip(out, 1)]) == "INPUT 1, OUTPUT 2" && Allowed.shortNames([strip(mon, 0)]) == name(strip(mon, 0))
                     && Allowed(passes: FakeHelper.version11, passesOn: FakeHelper.version11On).short.contains("INPUT 1 volume, pan, mute"),
@@ -1795,7 +1814,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         g.model.allowChanges(true)
         g.settle()
         t.check(g.model.snap.writesAllowed && g.model.allowed == v13
-                    && lines.contains { $0.contains("Changes switched on") && $0.contains("the volume of every channel (up to 0 dB)") },
+                    && lines.contains { $0.contains("Changes switched on") && $0.contains("the volume of every channel (up to +12 dB)") },
                 "changes on; the model's list is the helper's, and the record says so")
 
         // First round: every pair unlinked, so each channel moves alone.
@@ -1815,7 +1834,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
                 || g.model.volumeNote?.contains("Every other byte of the 256 read back the same") != true {
                 wrong.append(name(s) + " volume: \(g.model.volumeNote ?? "no note")")
             }
-            if g.model.setVolumeExact(s, unity + 1) != Int32(PANEL_ERR_VALUE) { wrong.append(name(s) + ": a volume above 0 dB wasn't refused") }
+            if g.model.setVolumeExact(s, UInt32(PANEL_MAX_VOLUME) + 1) != Int32(PANEL_ERR_VALUE) { wrong.append(name(s) + ": a volume past the top wasn't refused") }
             if g.model.setVolumeExact(s, unity) != ok { wrong.append(name(s) + " volume back") }
             g.settle()
             if unit(g, Int32(PANEL_F_VOLUME), s) != unity { wrong.append(name(s) + " volume: not back at 0 dB") }
@@ -1852,7 +1871,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
             g.settle()
             if unit(g, Int32(PANEL_F_ON), s) != 0 || !g.model.snap.channels[s.group][s.channel].on { wrong.append(name(s) + " on/off: not back on") }
         }
-        t.check(wrong.isEmpty, "all 22 channels, one by one: the volume to −3 dB and back, never above 0 dB; the pan to the middle and back, "
+        t.check(wrong.isEmpty, "all 22 channels, one by one: the volume to −3 dB and back, never past the top; the pan to the middle and back, "
                 + "never past the end, and none for MONITOR OUT; the bit 1 and back; each read back with nothing else moved (\(wrong.count) wrong\(wrong.first.map { ": " + $0 } ?? ""))")
         t.check(g.fake.changes.count == sentBefore + 2 * 22 + 2 * 20 + 2 * 22 && g.fake.refused == 0 && g.fake.tooMany == 0 && g.helper.blocked == 0
                     && g.model.guardBlocks == 0 && g.model.snap.disagreements == 0 && g.model.snap.writesAllowed,
@@ -1998,8 +2017,9 @@ func runSelfTest(verbose: Bool) -> Int32 {
         // Link version 16 (2026-11-19, the driver's own settings) changed nothing a control app is
         // told. Link version 17 (2026-11-21) adds Recall, Save and Reset, in a third number; what
         // it says about the ordinary changes is version 14's, unchanged. Link version 18 (the
-        // same day) names the same lists and asks for no go-ahead file any more.
-        t.check(panel_helper_link_version() == 18 && FakeHelper.version17 == panel_helper_passes() && FakeHelper.version14On == panel_helper_passes_on()
+        // same day) names the same lists and asks for no go-ahead file any more. Link version 19
+        // (2026-11-27) passes a volume up to the top of the range, with the same lists.
+        t.check(panel_helper_link_version() == 19 && FakeHelper.version17 == panel_helper_passes() && FakeHelper.version14On == panel_helper_passes_on()
                     && FakeHelper.version17Memory == panel_helper_passes_memory()
                     && FakeHelper.version17 == FakeHelper.version14 | UInt64(PANEL_PASS_MEMORY),
                 "the stand-in helper names what the real helper of this build (link version 18) names: version 14's two numbers and the memory commands")
@@ -2264,6 +2284,17 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(track.value(travel: -1, full: 176, range: 1).map { abs($0 - (0.5 - 1.0 / 176)) < 1e-12 } == true, "a point of travel is a 176th of the fader's way")
         t.check(track.value(travel: 0, full: 176, range: 1) == 0.5, "back where it was pressed, after a move: the start value is asked for again")
         t.check(track.value(travel: 500, full: 176, range: 1) == 1 && track.value(travel: -500, full: 176, range: 1) == 0, "held at the ends")
+        // The stop at 0 dB (the user's choice, 2026-11-27): a push from below halts there; let go and push again to go on.
+        let zero = FaderScale.position(dB: 0)
+        var fromBelow = DragTrack(start: FaderScale.position(dB: -6), stopAt: zero)
+        t.check(fromBelow.value(travel: 500, full: 176, range: 1) == zero && fromBelow.value(travel: -500, full: 176, range: 1) == 0,
+                "a fader pushed up from below 0 dB stops at 0 dB, and still goes all the way down")
+        var fromZero = DragTrack(start: zero, stopAt: zero)
+        t.check(fromZero.value(travel: 500, full: 176, range: 1) == 1, "pushed again from 0 dB: up to +12 dB")
+        var fromAbove = DragTrack(start: FaderScale.position(dB: 6), stopAt: zero)
+        t.check(fromAbove.value(travel: -500, full: 176, range: 1) == 0 && fromAbove.value(travel: 10, full: 176, range: 1)! > FaderScale.position(dB: 6),
+                "from above 0 dB it goes down past 0 dB, and up, with no stop")
+        t.equal(FaderScale.volume(position: zero), unity, "the stop is exactly 0 dB")
         let dBperPoint = FaderScale.dBPerPoint(at: -3, travel: Double(Metrics.faderHeight - FaderCap.height))
         t.check(abs(dBperPoint - 6.0 / 22) < 0.001, "around 0 dB a point of mouse travel on a fader is \(String(format: "%.3f", dBperPoint)) dB: 6 dB in 22 points (the scale of 2026-11-27)")
 
@@ -3302,7 +3333,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         b.settle()
         t.check(b.model.putBackNote?.contains("doesn't fit the unit as it is now") == true && b.model.putBackNote?.contains("Nothing was sent") == true
                     && panel_sim_sets_applied(b.unit.sim) == sets, "the fresh read shows 192 kHz: nothing is sent: \(b.model.putBackNote ?? "nil")")
-        // What can't be put back, and what is held at 0 dB: said before and after, not as a fault.
+        // What can't be put back: said before and after, not as a fault. A volume above 0 dB is put back as it is (since 2026-11-27).
         let c = Bench()
         c.openUp()
         c.unit.press(Int32(PANEL_SWITCH_MONO), in: true)
@@ -3314,19 +3345,19 @@ func runSelfTest(verbose: Bool) -> Int32 {
         loud.replaceSubrange(PanelModel.panOffset(strip(inp, 2))..<PanelModel.panOffset(strip(inp, 2)) + 4, with: PanelModel.panDigits(0x4000))
         t.equal(c.model.preparePutBack(from: write(c, "loud.ua101", loud, unit: "Pretend unit")), ok, "a backup with MONO out, another patch row and a volume of +6 dB: taken")
         let lp = c.model.pendingPutBack?.plan
-        t.check(lp?.held.count == 1 && lp?.held.first?.contains("INPUT 3 volume: the backup holds +6.0 dB; this app never sends more than 0.0 dB") == true
+        t.check(lp?.held.isEmpty == true
                     && lp?.cantPutBack.contains { $0.contains("MONO was out") && $0.contains("switches on the box") } == true
                     && lp?.cantPutBack.contains { $0.contains("d[9] (a patch bay row this app doesn't change): the backup holds 05, the unit 04") } == true
-                    && lp?.changes == [PutBackPlan.Change(what: "INPUT 3 pan", from: "L100", to: "C")],
-                "step 1 says what is held at 0 dB and what can't be put back: \(lp?.held ?? []) \(lp?.cantPutBack ?? []) \(lp?.changes.map { $0.what } ?? [])")
+                    && lp?.changes.map(\.what) == ["INPUT 3 volume", "INPUT 3 pan"] && lp?.changes.first?.to.hasPrefix("+6.0") == true,
+                "step 1: the +6 dB and the pan are put back, and it says what can't be: \(lp?.held ?? []) \(lp?.cantPutBack ?? []) \(lp?.changes.map { $0.what } ?? [])")
         c.model.confirmPutBack()
         c.settle()
         let cNote = c.model.putBackNote ?? "nil"
-        t.check(unitValue(c, fVolume, inp, 2) == unity && unitValue(c, fPan, inp, 2) == 0x4000 && simBlock(c.unit)[6] & 0x02 != 0 && simBlock(c.unit)[9] == 4,
-                "the pan is put back; the volume stays at 0 dB, MONO stays in, the other row stays")
-        t.check(cNote.contains("1 change sent") && cNote.contains("The unit matches the backup in everything this app can put back. 3 bytes still differ")
+        t.check(unitValue(c, fVolume, inp, 2) == 0x400000 && unitValue(c, fPan, inp, 2) == 0x4000 && simBlock(c.unit)[6] & 0x02 != 0 && simBlock(c.unit)[9] == 4,
+                "the volume (+6 dB) and the pan are put back; MONO stays in, the other row stays")
+        t.check(cNote.contains("2 changes sent") && cNote.contains("The unit matches the backup in everything this app can put back. 2 bytes still differ")
                     && cNote.contains("d[6] 06, backup 04 (the MONO and SOFT CTRL switches)") && cNote.contains("d[9] 04, backup 05")
-                    && cNote.contains("(INPUT 3 volume)") && cNote.contains("so 0.0 dB is put there") && cNote.contains("Not put back: The switches: in the backup MONO was out")
+                    && cNote.contains("Not put back: The switches: in the backup MONO was out")
                     && !cNote.contains("THE UNIT DIFFERS") && !MessageCenter.isWarning(cNote),
                 "afterwards: the bytes that differ, each with why, and no warning: \(cNote)")
 
@@ -3448,16 +3479,16 @@ func runSelfTest(verbose: Bool) -> Int32 {
                 "a pretend unit's backup onto the UA-101: refused")
         t.equal(c.model.preparePutBack(from: write(c, "real.ua101", simBlock(c.unit))), ok, "a UA-101 backup onto the pretend unit: taken")
         c.model.cancelPutBack()
-        // A volume above 0 dB in a backup never reaches the helper.
+        // A volume above 0 dB in a backup is put back as it is (since 2026-11-27), up to the top.
         var gLoud = all
         gLoud.replaceSubrange(PanelModel.volumeOffset(strip(out, 0))..<PanelModel.volumeOffset(strip(out, 0)) + 6, with: PanelModel.volumeDigits(0x7FFFFF))
         g.model.preparePutBack(from: write(g, "loud.ua101", gLoud))
         g.model.confirmPutBack()
         g.settle(12_000_000)
-        t.check(unitValue(g, fVolume, out, 0, real: true) == unity && g.fake.refused == 0 && g.helper.blocked == 0
+        t.check(unitValue(g, fVolume, out, 0, real: true) == 0x7FFFFF && g.fake.refused == 0 && g.helper.blocked == 0
                     && g.fake.changes[mark...].allSatisfy { panel_volume_message_channel($0, $0.count) >= 0 || $0.count != 18 }
-                    && g.model.putBackNote?.contains("OUTPUT 1 volume: the backup holds +12.0 dB") == true && !MessageCenter.isWarning(g.model.putBackNote ?? ""),
-                "+12 dB in the backup: 0 dB is sent and said, and no message above 0 dB left: \(g.model.putBackNote ?? "nil")")
+                    && g.model.putBackNote?.contains("match the backup, all 256 bytes") == true && !MessageCenter.isWarning(g.model.putBackNote ?? ""),
+                "+12 dB in the backup: put back as it is, nothing refused: \(g.model.putBackNote ?? "nil")")
         // The unit is unplugged half way: the app stops and says how far it got.
         g.model.preparePutBack(from: url(g, gName))
         let total = g.model.pendingPutBack?.plan.changes.count ?? 0
@@ -4031,7 +4062,7 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.check(Array(i.fake.changes[first...]) == [PanelModel.storeBoth(0).bytes] && Array(simMemory(i.fake.unit, 0)[12...247]) == Array(mine[12...247])
                     && note(i).contains("saved.") && note(i).contains("Your settings are back as before, all 256 bytes (0 changes)") && !warned(i),
                 "a file equal to the settings in use: one message, the Store: \(note(i))")
-        // A volume above 0 dB in the file is held at 0 dB, and that is said.
+        // A volume above 0 dB in the file goes into the memory as it is (since 2026-11-27).
         rest(i)
         var hot = other
         let input4 = PanelModel.volumeOffset(strip(inp, 3))
@@ -4039,9 +4070,9 @@ func runSelfTest(verbose: Bool) -> Int32 {
         i.model.prepareIntoMemory(from: write(i, "hot.ua101", hot), memory: 1)
         i.model.confirmIntoMemory()
         i.settle(20_000_000)
-        t.check(SettingsBackup.value(simMemory(i.fake.unit, 1), Int32(PANEL_F_VOLUME), inp, 3) == unity && note(i).contains("Held at 0 dB in the memory: INPUT 4 volume")
+        t.check(SettingsBackup.value(simMemory(i.fake.unit, 1), Int32(PANEL_F_VOLUME), inp, 3) == 0x400000 && !note(i).contains("Held")
                     && simBlock(i.fake.unit) == mine,
-                "a file with a volume above 0 dB: the memory gets 0 dB there, and it says so: \(note(i))")
+                "a file with a volume of +6 dB: the memory gets +6 dB there: \(note(i))")
         // The unit doesn't take the file's settings: nothing is stored, and yours are put back.
         rest(i)
         i.fake.unit.ignore(kind: Int(PANEL_F_PAN))
@@ -4628,10 +4659,10 @@ func runSelfTest(verbose: Bool) -> Int32 {
                 "a grey volume message (sent, the unit took it): it arrives in the list, no pop-up, nothing opens")
         t.check(!MessagePopups.popsUp(m.messages.now.first { $0.slot == .volume }!), "grey never pops up")
 
-        // A volume held at the top: grey.
-        t.equal(m.model.setVolume(strip(inp, 3), FaderScale.volume(dB: 6)), Int32(PANEL_CLAMPED), "+6 dB is held")
-        t.check(m.messages.now.contains { $0.slot == .refusal && $0.title == "Held" && $0.level == .info } && m.popupsShown.isEmpty && m.popups.showing == nil,
-                "a fader dragged to the top, held at 0 dB: grey, only in the list, no pop-up")
+        // A fader above 0 dB (since 2026-11-27): no refusal, no pop-up.
+        t.equal(m.model.setVolume(strip(inp, 3), FaderScale.volume(dB: 6)), Int32(PANEL_OK), "+6 dB goes as it is")
+        t.check(!m.messages.now.contains { $0.slot == .refusal } && m.popupsShown.isEmpty && m.popups.showing == nil,
+                "nothing held, nothing in the list as a refusal, no pop-up")
         m.model.setVolume(strip(inp, 3), FaderScale.volume(dB: -10))
         m.settle()
 

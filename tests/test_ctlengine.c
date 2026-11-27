@@ -685,17 +685,25 @@ static void test_volume_ceiling(void)
     rig r;
 
     rig_ready(&r, NULL);
+    /* As delivered (since 2026-11-27) the ceiling is the top of the range: up to +12 dB goes
+       as it is, and past the top is no volume at all. */
+    EXPECT(r.eng.cfg.volume_ceiling == UA101_MAX_VOLUME);
+    EXPECT(ua101_eng_set_volume(&r.eng, IN, 0, UNITY + 1, r.now) == UA101_ENG_OK);
+    EXPECT(ua101_eng_set_volume(&r.eng, IN, 1, UA101_MAX_VOLUME, r.now) == UA101_ENG_OK);
+    EXPECT(ua101_eng_set_volume(&r.eng, IN, 2, UA101_MAX_VOLUME + 1, r.now) == UA101_ENG_ERR_VALUE);
+    settle(&r);
+    EXPECT(unit_value(&r, UA101_F_VOLUME, IN, 0) == UNITY + 1);
+    EXPECT(unit_value(&r, UA101_F_VOLUME, IN, 1) == UA101_MAX_VOLUME);
+    /* A lower ceiling holds a higher volume there, and the caller is told. */
+    ua101_eng_set_volume_ceiling(&r.eng, UNITY);
     EXPECT(ua101_eng_set_volume(&r.eng, IN, 0, 0x100000, r.now) == UA101_ENG_OK);
-    /* Above 0 dB is held at 0 dB, and the caller is told. */
     EXPECT(ua101_eng_set_volume(&r.eng, IN, 0, UNITY + 1, r.now) == UA101_ENG_CLAMPED);
     EXPECT(ua101_eng_set_volume(&r.eng, IN, 1, UA101_MAX_VOLUME, r.now) == UA101_ENG_CLAMPED);
     settle(&r);
     EXPECT(unit_value(&r, UA101_F_VOLUME, IN, 0) == UNITY);
     EXPECT(unit_value(&r, UA101_F_VOLUME, IN, 1) == UNITY);
     ua101_eng_set_volume_ceiling(&r.eng, 0xFFFFFFFFu);
-    EXPECT(ua101_eng_set_volume(&r.eng, IN, 0, UA101_MAX_VOLUME, r.now) == UA101_ENG_OK);
-    settle(&r);
-    EXPECT(unit_value(&r, UA101_F_VOLUME, IN, 0) == UA101_MAX_VOLUME);
+    EXPECT(r.eng.cfg.volume_ceiling == UA101_MAX_VOLUME);
     rig_check(&r);
 }
 
@@ -1624,9 +1632,9 @@ static void random_run(unsigned seed, int writes, int memory_allowed, unsigned s
     else
         g_memory_commands += r.risk[UA101_RISK_MEMORY];
     EXPECT(r.risk[UA101_RISK_MEMORY] == r.sim.memory_commands);
-    /* Never above the ceiling, whatever was asked. */
+    /* Never above the ceiling (the top of the range), whatever was asked. */
     for (i = 0; i < 22; i++)
-        EXPECT(ua101_block_get(r.sim.block, ua101_field_from_id(i)) <= UNITY);
+        EXPECT(ua101_block_get(r.sim.block, ua101_field_from_id(i)) <= UA101_MAX_VOLUME);
     rig_check(&r);
 }
 
