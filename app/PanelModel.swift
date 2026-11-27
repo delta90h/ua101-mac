@@ -254,6 +254,10 @@ final class PanelModel: ObservableObject {
     private var ticketID: Int?
     private var dragDepth = 0
     private var keyChanging = false // inside a key's change: it is one of a run, as a drag's values are
+    /// The channel a held up key stopped at 0 dB, while that key is held (2026-11-27: a held ↑
+    /// went on past 0 dB, one 0.5 dB repeat after the other). Its repeats stay at 0 dB; a fresh
+    /// press goes on, as a fader pushed again does.
+    private var keyStoppedAt: StripID?
     /// A pause or resume of the saving whose read-back hasn't come yet.
     private var savingWatch: SavingWatch?
     /// A patch bay change to the UA-101 whose read-back hasn't come yet.
@@ -2929,15 +2933,18 @@ final class PanelModel: ObservableObject {
         cursor = order[(i + step + order.count) % order.count]
     }
 
-    func handle(_ key: PanelKey) {
+    /// `repeated`: whether the key is a held key's repeat (true), a fresh press (false), or not
+    /// known (nil). Only the stop at 0 dB looks at it; an unknown one counts as a repeat while
+    /// the keys haven't been quiet (`keyHoldMicros`), so a held key never runs past the stop.
+    func handle(_ key: PanelKey, repeated: Bool? = nil) {
         let s = cursor
         let ch = snap.channels[s.group][s.channel]
         switch key {
         case .cursorLeft: moveCursor(by: -1)
         case .cursorRight: moveCursor(by: 1)
-        case .volumeUp: nudgeVolume(s, ch, Self.keyStepDB)
+        case .volumeUp: nudgeVolume(s, ch, Self.keyStepDB, repeated: repeated)
         case .volumeDown: nudgeVolume(s, ch, -Self.keyStepDB)
-        case .volumeUpBig: nudgeVolume(s, ch, Self.keyBigStepDB)
+        case .volumeUpBig: nudgeVolume(s, ch, Self.keyBigStepDB, repeated: repeated)
         case .volumeDownBig: nudgeVolume(s, ch, -Self.keyBigStepDB)
         case .panLeft: nudgePan(s, ch, -Self.keyPanStep)
         case .panRight: nudgePan(s, ch, Self.keyPanStep)
@@ -2950,7 +2957,14 @@ final class PanelModel: ObservableObject {
         }
     }
 
-    private func nudgeVolume(_ s: StripID, _ ch: ChannelState, _ stepDB: Double) {
+    private func nudgeVolume(_ s: StripID, _ ch: ChannelState, _ stepDB: Double, repeated: Bool? = nil) {
+        let unity = UInt32(PANEL_UNITY_VOLUME)
+        // Held at the stop: a held key's repeats stay at 0 dB, and keep the hold going.
+        if stepDB > 0, ch.volume == unity, keyStoppedAt == s, keyHoldID != nil, repeated != false {
+            keyChange(pauses: dragPauses(volume: s)) {}
+            return
+        }
+        keyStoppedAt = nil
         var target: UInt32
         if ch.volume == 0 {
             if stepDB < 0 { return }
@@ -2960,8 +2974,12 @@ final class PanelModel: ObservableObject {
             target = d < FaderScale.bottomDB ? 0 : FaderScale.volume(dB: min(d, FaderScale.topDB))
         }
         if abs(panel_volume_db(target)) < 0.01 { target = UInt32(PANEL_UNITY_VOLUME) }
-        // From below 0 dB a step up stops at 0 dB, as the fader does; the next step goes on.
-        if ch.volume < UInt32(PANEL_UNITY_VOLUME) && target > UInt32(PANEL_UNITY_VOLUME) { target = UInt32(PANEL_UNITY_VOLUME) }
+        // From below 0 dB a step up stops at 0 dB, as the fader does, also when it lands there
+        // exactly; while the key is held it stays there, and a fresh press goes on.
+        if stepDB > 0, ch.volume < unity, target >= unity {
+            target = unity
+            keyStoppedAt = s
+        }
         keyChange(pauses: dragPauses(volume: s)) { self.setVolume(s, target) }
     }
 
@@ -2996,6 +3014,7 @@ final class PanelModel: ObservableObject {
     }
 
     private func releaseKeyHold() {
+        keyStoppedAt = nil
         panel_drag_end(engine, scheduler.now)
         afterCall()
     }

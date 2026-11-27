@@ -640,6 +640,14 @@ struct PanelCommands: Commands {
     static let memoriesHeading = "Memories in the UA-101"
     static let backupsHeading = "Backup files on this Mac"
 
+    /// Whether the key that chose a menu item is a held key's repeat: true or false from the
+    /// key event, nil when the item wasn't chosen by a key (a click in the menu: the model then
+    /// treats it as a repeat only while keys were pressed a moment ago).
+    static func keyRepeated() -> Bool? {
+        guard let e = NSApp.currentEvent, e.type == .keyDown else { return nil }
+        return e.isARepeat
+    }
+
     /// A Mixer menu shortcut with no ⌘: off while the notes pad has the keyboard.
     private func oneKey(_ key: KeyEquivalent, _ modifiers: EventModifiers) -> KeyboardShortcut? {
         ui.typingNotes ? nil : KeyboardShortcut(key, modifiers: modifiers)
@@ -821,9 +829,9 @@ struct PanelCommands: Commands {
                 Button("Centre") { model.handle(.panCenter) }.keyboardShortcut(oneKey("c", []))
             }
             Menu("Volume") {
-                Button("Up 0.5 dB") { model.handle(.volumeUp) }.keyboardShortcut(oneKey(.upArrow, []))
+                Button("Up 0.5 dB") { model.handle(.volumeUp, repeated: Self.keyRepeated()) }.keyboardShortcut(oneKey(.upArrow, []))
                 Button("Down 0.5 dB") { model.handle(.volumeDown) }.keyboardShortcut(oneKey(.downArrow, []))
-                Button("Up 3 dB") { model.handle(.volumeUpBig) }.keyboardShortcut(oneKey(.upArrow, .shift))
+                Button("Up 3 dB") { model.handle(.volumeUpBig, repeated: Self.keyRepeated()) }.keyboardShortcut(oneKey(.upArrow, .shift))
                 Button("Down 3 dB") { model.handle(.volumeDownBig) }.keyboardShortcut(oneKey(.downArrow, .shift))
             }
             Menu("Link") {

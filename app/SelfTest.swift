@@ -313,7 +313,9 @@ func runSelfTest(verbose: Bool) -> Int32 {
         b.model.handle(.volumeUpBig)
         t.equal(b.model.snap.channels[out][2].volume, unity, "up from below stops at 0 dB (−5, −2, then 0, not +1)")
         b.model.handle(.volumeUpBig)
-        t.equal(Format.dB(b.model.snap.channels[out][2].volume), "+3.0", "the next step goes past it: +3.0 dB")
+        t.equal(b.model.snap.channels[out][2].volume, unity, "the key still held (a repeat, as far as the app knows): it stays at 0 dB")
+        b.model.handle(.volumeUpBig, repeated: false)
+        t.equal(Format.dB(b.model.snap.channels[out][2].volume), "+3.0", "a fresh press goes past it: +3.0 dB")
         for _ in 0..<6 { b.model.handle(.volumeUpBig) }
         t.equal(b.model.snap.channels[out][2].volume, FaderScale.volume(dB: 12), "and up to +12 dB, the top, no higher")
         b.model.handle(.volumeDown)
@@ -340,6 +342,47 @@ func runSelfTest(verbose: Bool) -> Int32 {
         t.equal(Format.dB(b.model.snap.channels[inp][5].volume), "−60.0", "one step up from off: −60 dB")
         b.settle()
         t.check(b.model.disagreement == nil && !b.model.snap.busy, "checked, no disagreement")
+    }
+
+    // ---- 5b
+    if t.begin("a held ↑ key stops at 0 dB (the owner on the box, 2026-11-27)") {
+        // On the box a held ↑ went from −13.0 dB in steps of 0.5 straight on to +12 dB: the
+        // steps land on 0 dB exactly, and the next repeat went on from there.
+        let b = Bench()
+        b.openUp()
+        let in2 = strip(inp, 1)
+        b.model.setLink(group: inp, pair: 0, on: true)
+        b.model.setVolumeExact(in2, FaderScale.volume(dB: -13))
+        b.settle()
+        b.model.cursor = in2
+        var path: [String] = []
+        for i in 0..<60 {
+            b.model.handle(.volumeUp, repeated: i > 0)
+            b.time.advance(80_000) // key repeat, 12 a second
+            path.append(Format.dB(b.model.snap.channels[inp][1].volume))
+        }
+        t.check(path[25] == "0.0" && path.last == "0.0" && !path.contains { $0.hasPrefix("+") },
+                "held for 60 repeats from −13 dB: up to 0.0 dB in 26 steps, then it stays there (last \(path.last ?? "?"))")
+        t.check(b.model.snap.channels[inp][0].volume == unity, "INPUT 1, linked, stays at 0 dB with it")
+        b.model.handle(.volumeUp) // not known whether it is a repeat, and the key was held a moment ago
+        t.equal(b.model.snap.channels[inp][1].volume, unity, "a step that may be a repeat, just after: still 0 dB")
+        b.model.handle(.volumeUp, repeated: false)
+        t.equal(Format.dB(b.model.snap.channels[inp][1].volume), "+0.5", "let go and pressed again: on to +0.5 dB")
+        for _ in 0..<40 { b.model.handle(.volumeUp, repeated: true); b.time.advance(80_000) }
+        t.equal(b.model.snap.channels[inp][1].volume, FaderScale.volume(dB: 12), "held from there: up to +12 dB, the top")
+        // Down, then up again with a key not known to be a repeat, after the keys were quiet.
+        for _ in 0..<5 { b.model.handle(.volumeDownBig) }
+        b.settle()
+        t.equal(Format.dB(b.model.snap.channels[inp][1].volume), "−3.0", "five big steps down: −3.0 dB, no stop on the way down")
+        b.model.handle(.volumeUpBig)
+        b.model.handle(.volumeUpBig)
+        t.equal(b.model.snap.channels[inp][1].volume, unity, "two big steps up from −3 dB: 0 dB, not +3")
+        b.settle()
+        b.model.handle(.volumeUpBig)
+        t.equal(Format.dB(b.model.snap.channels[inp][1].volume), "+3.0", "after the keys were quiet a moment, the next step goes on: +3.0 dB")
+        b.settle()
+        t.check(b.model.disagreement == nil && !b.model.snap.busy && unitValue(b, Int32(PANEL_F_VOLUME), inp, 1) == FaderScale.volume(dB: 3),
+                "the unit has +3.0 dB, no disagreement")
     }
 
     // ---- 6
@@ -2437,6 +2480,74 @@ func runSelfTest(verbose: Bool) -> Int32 {
                     "on the way to the unit: a pause, the three values, a resume (\(sent.count) messages)")
         } else {
             t.check(false, "INPUT 1's fader was found in the window")
+        }
+
+        // The stop at 0 dB with real mouse events (the owner, 2026-11-27: on the box it went
+        // straight past 0 dB). From below, small steps up as a hand makes them: it halts at
+        // 0 dB however far the hand goes; let go and push again: on up to +12 dB.
+        if let start = cap() {
+            var path: [Double] = []
+            mouse(.leftMouseDown, start)
+            for i in 1...40 {
+                mouse(.leftMouseDragged, CGPoint(x: start.x, y: start.y - CGFloat(5 * i)))
+                g.settle(20_000)
+                path.append(dB())
+            }
+            mouse(.leftMouseUp, CGPoint(x: start.x, y: start.y - 200))
+            g.settle()
+            turn()
+            t.check(g.model.snap.channels[inp][0].volume == unity && path.allSatisfy { $0 <= 0.0001 },
+                    "pushed up 200 points from below 0 dB: it stops at 0 dB (highest on the way \(String(format: "%.2f", path.max() ?? -99)) dB, now \(String(format: "%.2f", dB())) dB)")
+            if let again = cap() {
+                mouse(.leftMouseDown, again)
+                for i in 1...10 {
+                    mouse(.leftMouseDragged, CGPoint(x: again.x, y: again.y - CGFloat(5 * i)))
+                    g.settle(20_000)
+                }
+                mouse(.leftMouseUp, CGPoint(x: again.x, y: again.y - 50))
+                g.settle()
+                turn()
+                t.check(dB() > 6, "let go and pushed again from 0 dB: it goes on up (\(String(format: "%.2f", dB())) dB)")
+            }
+            g.model.setVolumeExact(in1, 0x16A09E)
+            g.settle()
+            turn()
+        }
+        // The same on INPUT 2 with INPUT 1-2 linked, as on the box.
+        do {
+            let in2 = strip(inp, 1)
+            g.model.setLink(group: inp, pair: 0, on: true)
+            g.settle()
+            g.model.setVolumeExact(in2, 0x06E0E0) // −13.4 dB, both channels
+            g.settle()
+            turn()
+            func cap2() -> CGPoint? {
+                guard let f = g.ui.faderFrames[in2] else { return nil }
+                let pos = FaderScale.position(volume: g.model.snap.channels[inp][1].volume)
+                return CGPoint(x: f.minX + 29, y: f.minY + CGFloat(1 - pos) * travel + FaderCap.height / 2)
+            }
+            func dB2() -> Double { panel_volume_db(g.model.snap.channels[inp][1].volume) }
+            if let start = cap2() {
+                var path: [Double] = []
+                mouse(.leftMouseDown, start)
+                for i in 1...40 {
+                    mouse(.leftMouseDragged, CGPoint(x: start.x, y: start.y - CGFloat(5 * i)))
+                    g.settle(20_000)
+                    path.append(dB2())
+                }
+                mouse(.leftMouseUp, CGPoint(x: start.x, y: start.y - 200))
+                g.settle()
+                turn()
+                t.check(g.model.snap.channels[inp][1].volume == unity && g.model.snap.channels[inp][0].volume == unity && path.allSatisfy { $0 <= 0.0001 },
+                        "linked INPUT 1-2, INPUT 2 pushed up 200 points from −13.4 dB: both stop at 0 dB (highest on the way \(String(format: "%.2f", path.max() ?? -99)) dB)")
+            } else {
+                t.check(false, "INPUT 2's fader was found in the window")
+            }
+            g.model.setLink(group: inp, pair: 0, on: false)
+            g.model.setVolumeExact(in2, unity)
+            g.model.setVolumeExact(in1, 0x16A09E)
+            g.settle()
+            turn()
         }
 
         // The pan knob, the same way.
