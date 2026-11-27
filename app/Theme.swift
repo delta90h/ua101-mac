@@ -45,6 +45,10 @@ struct Theme {
 
     /// A lit MUTE key (1.1): deep red, #A8000E, in both looks (the user's choice of eight, 2026-11-27).
     var mute: Color { Color(red: 168 / 255, green: 0, blue: 14 / 255) }
+    /// A lit SOLO key (1.1): amber #FA9E12, between honey and Apple's orange, in both looks
+    /// (the user's choice, 2026-11-27), with dark words on it. The other warnings keep `warn`.
+    var solo: Color { Color(red: 250 / 255, green: 158 / 255, blue: 18 / 255) }
+    var soloText: Color { Color(red: 0.04, green: 0.06, blue: 0.08) }
 
     /// The red light inside an optical socket.
     var optical: Color { scheme == .dark ? Color(red: 1.00, green: 0.24, blue: 0.20) : Color(red: 0.90, green: 0.14, blue: 0.12) }

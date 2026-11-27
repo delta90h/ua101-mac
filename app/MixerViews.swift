@@ -509,9 +509,9 @@ struct StripView: View {
                 model.toggleSolo(id)
             }) {
                 Text("SOLO").font(.panel(8, .bold))
-                    .foregroundColor(soloed ? theme.onText : sec.keyText)
+                    .foregroundColor(soloed ? theme.soloText : sec.keyText)
                     .frame(width: 38, height: 15)
-                    .keycap(on: soloed, color: theme.warn, radius: 7.5,
+                    .keycap(on: soloed, color: theme.solo, radius: 7.5,
                             flagged: d.map { Int32($0.kind) == Int32(PANEL_F_SOLO) && $0.group == id.group } ?? false)
             }
             .buttonStyle(.plain)
