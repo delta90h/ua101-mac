@@ -6,6 +6,11 @@
  * or its parser builds a message that sets anything, and the only send goes
  * through a check that refuses anything but a request. See docs/control-protocol.md.
  *
+ * With --all-blocks (a developer's test, 2026-11-27) it also asks for the other 15 blocks at
+ * 02 01 00 00 to 02 0F 00 00, one at a time, and the settings block again at the end, to see
+ * whether the unit's memories can be read without loading them. Those are asks too, built by
+ * ua101_ctl_block_request and passed through the same check; still nothing sets anything.
+ *
  * It installs nothing and changes no system setting. Run it without sudo, with
  * no other program using the UA-101's MIDI interface.
  */
@@ -36,6 +41,7 @@ typedef IOUSBInterfaceInterface650 **interface_ref;
 #define INTERFACE_WAIT_US 100000
 #define MAX_PAN 0x8000u
 #define MAX_VOLUME 0x7FFFFFu
+#define BLOCK_PAUSE_US 100000
 
 typedef struct {
     interface_ref intf;
@@ -57,6 +63,13 @@ typedef struct {
     unsigned other_messages;
     unsigned change_messages;
     uint64_t bytes_received;
+
+    /* --all-blocks */
+    int all_blocks;
+    int have_block[UA101_CTL_BLOCKS];
+    uint8_t blocks[UA101_CTL_BLOCKS][UA101_CTL_BLOCK_BYTES];
+    int have_again; /* the settings block, asked again at the end */
+    uint8_t again[UA101_CTL_BLOCK_BYTES];
 } session;
 
 static session g_session;
@@ -262,6 +275,9 @@ static void handle_message(session *s, const uint8_t *msg, size_t len)
         if (!s->have_settings) {
             memcpy(s->block, view.data, sizeof(s->block));
             s->have_settings = 1;
+        } else if (s->all_blocks && !s->have_again) {
+            memcpy(s->again, view.data, sizeof(s->again));
+            s->have_again = 1;
         } else {
             printf("  Another settings block arrived, which isn't shown.\n");
         }
@@ -271,12 +287,24 @@ static void handle_message(session *s, const uint8_t *msg, size_t len)
         printf("  %8.3f s  Value change: address 00 01 00 %02x, value 0x%02x\n",
                CFAbsoluteTimeGetCurrent() - s->start_time, view.address[3], view.data[0]);
         break;
-    case UA101_CTL_OTHER:
+    case UA101_CTL_OTHER: {
+        unsigned block = 0;
+
+        if (s->all_blocks && ua101_ctl_block_reply(&view, &block) && block != 0) {
+            if (!s->have_block[block]) {
+                memcpy(s->blocks[block], view.data, UA101_CTL_BLOCK_BYTES);
+                s->have_block[block] = 1;
+            } else {
+                printf("  Block 02 %02x arrived again; the first one is kept.\n", block);
+            }
+            break;
+        }
         s->other_messages++;
         printf("  Other message (%zu bytes): ", len);
         print_hex(msg, len < 32 ? len : 32);
         printf("%s\n", len > 32 ? " ..." : "");
         break;
+    }
     case UA101_CTL_BAD_CHECKSUM:
         s->checksum_failures++;
         printf("  Message with a bad checksum (%zu bytes): ", len);
@@ -332,17 +360,33 @@ static void start_read(session *s)
 }
 
 /*
- * The only send in this program, and it takes no arguments. The message is built
- * here, and has to pass the check before it can go anywhere.
+ * Builds the ask for one block (0 is the settings block) and checks it. Returns 0, and
+ * says why, if it isn't an ask that sets nothing.
  */
-static IOReturn send_read_request(session *s)
+static int build_block_request(unsigned block, uint8_t request[UA101_CTL_READ_REQUEST_BYTES])
+{
+    if (!ua101_ctl_block_request(block, request)) {
+        printf("  There is no block %u to ask for, so nothing was sent.\n", block);
+        return 0;
+    }
+    if (!ua101_ctl_is_request_only(request, UA101_CTL_READ_REQUEST_BYTES)) {
+        printf("  The check refused the message, so nothing was sent.\n");
+        return 0;
+    }
+    return 1;
+}
+
+/*
+ * The only send in this program. The message is built here from a block number, and
+ * has to pass the check before it can go anywhere.
+ */
+static IOReturn send_block_request(session *s, unsigned block)
 {
     uint8_t request[UA101_CTL_READ_REQUEST_BYTES];
     uint8_t packets[UA101_CTL_READ_PACKET_BYTES];
     size_t packed;
 
-    ua101_ctl_read_request(request);
-    if (!ua101_ctl_is_request_only(request, sizeof(request))) {
+    if (!build_block_request(block, request)) {
         printf("  The check refused the message, so nothing was sent.\n");
         return kIOReturnBadArgument;
     }
@@ -357,6 +401,15 @@ static IOReturn send_read_request(session *s)
     printf("\n");
     return (*s->intf)->WritePipeTO(s->intf, s->pipe_out, packets, (UInt32)packed, WRITE_TIMEOUT_MS,
                                    WRITE_TIMEOUT_MS);
+}
+
+/* Runs callbacks until the time is up, *flag turns 1, or something stops it. */
+static void run_loop_until_flag(session *s, double seconds, const int *flag)
+{
+    CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent() + seconds;
+
+    while (CFAbsoluteTimeGetCurrent() < deadline && !g_signal && s->read_error == 0 && !*flag)
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
 }
 
 /* Runs callbacks until the time is up, the settings arrive (if asked), or something stops it. */
@@ -464,6 +517,107 @@ static unsigned print_settings(const session *s, uint32_t descriptor_rate)
     return problems;
 }
 
+static void print_block(const uint8_t *block)
+{
+    unsigned c;
+
+    for (c = 0; c < UA101_CTL_BLOCK_BYTES; c += 16) {
+        printf("    %02x: ", c);
+        print_hex(block + c, 16);
+        printf("\n");
+    }
+}
+
+/* Prints which bytes differ from the settings block in use, as ranges. */
+static unsigned print_differences(const uint8_t *block, const uint8_t *in_use)
+{
+    unsigned i = 0, count = 0, ranges = 0;
+
+    printf("    Differs from 02 00 in bytes:");
+    while (i < UA101_CTL_BLOCK_BYTES) {
+        unsigned start;
+
+        if (block[i] == in_use[i]) {
+            i++;
+            continue;
+        }
+        start = i;
+        while (i < UA101_CTL_BLOCK_BYTES && block[i] != in_use[i])
+            i++;
+        count += i - start;
+        if (ranges++ < 24)
+            printf(i - start == 1 ? " %u" : " %u-%u", start, i - 1);
+    }
+    printf(count == 0 ? " none (the same)\n" : (ranges > 24 ? " ... (%u bytes)\n" : " (%u bytes)\n"),
+           count);
+    return count;
+}
+
+/* --all-blocks --dry-run: what would be sent, with no unit. */
+static int dry_run(void)
+{
+    uint8_t request[UA101_CTL_READ_REQUEST_BYTES];
+    unsigned b, refused = 0;
+
+    printf("=== UA-101 all blocks, dry run: nothing is opened or sent ===\n");
+    printf("In this order, one at a time, each after the last one's answer (or %.0f s):\n",
+           REPLY_WAIT_SECONDS);
+    for (b = 0; b <= UA101_CTL_BLOCKS; b++) {
+        unsigned block = b % UA101_CTL_BLOCKS;
+
+        if (!build_block_request(block, request)) {
+            refused++;
+            continue;
+        }
+        printf("  02 %02x%s: ", block, b == UA101_CTL_BLOCKS ? " again" : "      ");
+        print_hex(request, sizeof(request));
+        printf("   ask only: %s; the helper would pass it: %s\n",
+               ua101_ctl_is_request_only(request, sizeof(request)) ? "yes" : "NO",
+               ua101_ctl_is_read_request(request, sizeof(request)) ? "yes" : "no");
+    }
+    printf("=== Dry run: %s ===\n", refused == 0 ? "17 asks, all pass the check" : "REFUSED");
+    return refused == 0 ? 0 : 1;
+}
+
+/* After the settings block: the other 15, then the settings block again. Returns 1 if all went. */
+static int read_other_blocks(session *s)
+{
+    unsigned b, answered = 0, same;
+
+    printf("\nThe other blocks, one at a time:\n");
+    for (b = 1; b <= UA101_CTL_BLOCKS && !g_signal && s->read_error == 0; b++) {
+        int *flag = b < UA101_CTL_BLOCKS ? &s->have_block[b] : &s->have_again;
+
+        usleep(BLOCK_PAUSE_US);
+        if (send_block_request(s, b % UA101_CTL_BLOCKS) != kIOReturnSuccess) {
+            printf("  Sending failed, so nothing more is sent.\n");
+            return 0;
+        }
+        run_loop_until_flag(s, REPLY_WAIT_SECONDS, flag);
+        if (b < UA101_CTL_BLOCKS)
+            answered += *flag != 0;
+        printf("  02 %02x%s: %s\n", b % UA101_CTL_BLOCKS, b < UA101_CTL_BLOCKS ? "" : " again",
+               *flag ? "answered" : "NO REPLY");
+    }
+    if (g_signal || s->read_error != 0)
+        return 0;
+
+    printf("\nBlocks (02 03 to 02 07 are probably Memory 1 to 5):\n");
+    for (b = 1; b < UA101_CTL_BLOCKS; b++) {
+        printf("\n  Block 02 %02x:%s\n", b, s->have_block[b] ? "" : " no reply");
+        if (!s->have_block[b])
+            continue;
+        print_differences(s->blocks[b], s->block);
+        print_block(s->blocks[b]);
+    }
+    same = s->have_again && memcmp(s->again, s->block, sizeof(s->block)) == 0;
+    printf("\n%u of 15 other blocks answered. The settings in use, read again at the end: %s\n",
+           answered, !s->have_again ? "NO REPLY" : same ? "the same as at the start" : "CHANGED");
+    if (s->have_again && !same)
+        print_differences(s->again, s->block);
+    return s->have_again && same;
+}
+
 int main(int argc, char **argv)
 {
     session *s = &g_session;
@@ -478,20 +632,33 @@ int main(int argc, char **argv)
     int exit_code = 1, source_added = 0, opened = 0, i;
     uint32_t descriptor_rate = 0;
     unsigned problems = 0;
+    int dry = 0, blocks_ok = 1;
 
     setvbuf(stdout, NULL, _IOLBF, 0);
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--watch") == 0 && i + 1 < argc) {
             watch_seconds = atof(argv[++i]);
+        } else if (strcmp(argv[i], "--all-blocks") == 0) {
+            s->all_blocks = 1;
+        } else if (strcmp(argv[i], "--dry-run") == 0) {
+            dry = 1;
         } else {
-            printf("Usage: ua101settings [--watch SECONDS]\n"
+            printf("Usage: ua101settings [--watch SECONDS] [--all-blocks [--dry-run]]\n"
                    "  Reads the unit's settings. It can't change them.\n"
                    "  --watch SECONDS  then keeps listening for changes, such as a front panel\n"
-                   "                   switch being moved, up to %.0f s\n",
+                   "                   switch being moved, up to %.0f s\n"
+                   "  --all-blocks     also asks for blocks 02 01 to 02 0F (developer's test)\n"
+                   "  --dry-run        with --all-blocks: only prints what it would send\n",
                    MAX_WATCH_SECONDS);
             return 2;
         }
     }
+    if (dry && !s->all_blocks) {
+        printf("--dry-run goes with --all-blocks.\n");
+        return 2;
+    }
+    if (dry)
+        return dry_run();
     if (!(watch_seconds >= 0.0) || watch_seconds > MAX_WATCH_SECONDS) {
         printf("--watch must be between 0 and %.0f seconds.\n", MAX_WATCH_SECONDS);
         return 2;
@@ -565,7 +732,7 @@ int main(int argc, char **argv)
         printf("  Couldn't start reading: %s\n", describe(s->read_error));
         goto stop;
     }
-    result = send_read_request(s);
+    result = send_block_request(s, 0);
     if (result != kIOReturnSuccess) {
         printf("  Sending failed: %s\n", describe(result));
         goto stop;
@@ -582,6 +749,8 @@ int main(int argc, char **argv)
     if (s->have_settings) {
         printf("  Reply: a settings block with a valid checksum\n");
         problems = print_settings(s, descriptor_rate);
+        if (s->all_blocks)
+            blocks_ok = read_other_blocks(s);
     } else {
         printf("\nNo settings block arrived within %.0f s. Nothing was changed, and nothing "
                "more was sent.\n",
@@ -599,7 +768,7 @@ int main(int argc, char **argv)
         printf("\nAlso received: %u with a bad checksum, %u unrecognized, %u others.\n",
                s->checksum_failures, s->format_failures, s->other_messages);
 
-    exit_code = (s->have_settings && problems == 0 && s->checksum_failures == 0) ? 0 : 1;
+    exit_code = (s->have_settings && problems == 0 && s->checksum_failures == 0 && blocks_ok) ? 0 : 1;
     printf("\n=== Settings read: %s ===\n",
            exit_code == 0        ? "OK"
            : s->have_settings    ? "DONE, but the values raise questions (see above)"

@@ -178,6 +178,26 @@ To also watch for changes, run this and move a front-panel switch while it liste
 
 The last line reads `OK`, `NO REPLY`, or a warning that some values raise questions, for example if the sample rate doesn't match the USB descriptors. The protocol notes are in [docs/control-protocol.md](control-protocol.md).
 
+A developer's test (not yet run on a UA-101): `--all-blocks` also asks for the blocks at `02 01 00 00` to `02 0F 00 00`, one at a time, then for the settings block again, to see whether the five memories can be read without loading them. On the sister UA-1000, `02 03` to `02 07` seem to be the memories. These are asks as well, and pass the same check; nothing sets anything. It prints each block and how it differs from the settings in use, and says whether the settings in use were still the same at the end. With the driver installed, the helper holds the unit, so stop it first and start it again afterwards (both need an administrator's password):
+
+```bash
+./build/ua101settings --all-blocks --dry-run
+```
+
+```bash
+sudo launchctl bootout system/io.github.delta90h.ua101d
+```
+
+```bash
+./build/ua101settings --all-blocks
+```
+
+```bash
+sudo launchctl bootstrap system /Library/LaunchDaemons/io.github.delta90h.ua101d.plist
+```
+
+`--dry-run` opens nothing and sends nothing: it prints the 17 messages it would send and whether each passes the check.
+
 ## Stage 3: the helper's self-test
 
 `ua101d` is the helper the driver uses: it streams with the unit and shares the audio and the clock through one block of memory. Run by hand, it only runs a self-test. A thread in the same program stands in for the plug-in's I/O cycle: it wakes at each period, as Core Audio would, reads capture by sample time and writes **silence** to playback, then checks the timestamps, what was missing and how late each step was. Nothing but digital silence goes to the outputs. Close any program using the unit first (`pgrep -fl 'ua101stream|ua101d'`).

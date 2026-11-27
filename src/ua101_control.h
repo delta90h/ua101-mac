@@ -30,6 +30,13 @@ uint8_t ua101_ctl_checksum(const uint8_t *bytes, size_t count);
 
 /* Writes the one request this project sends: read the whole settings block. */
 void ua101_ctl_read_request(uint8_t out[UA101_CTL_READ_REQUEST_BYTES]);
+/* For the developer's read-only test of the unit's other blocks (ua101settings --all-blocks,
+   2026-11-27): the request for block 02 <block> 00 00, 256 bytes. Block 0 is the settings in
+   use; on the sister UA-1000, 03 to 07 seem to be the five memories. Returns 0, and writes
+   nothing, for a block above 0x0F. The helper passes none of these but block 0 on
+   (ua101_ctl_is_read_request below). */
+#define UA101_CTL_BLOCKS 16
+int ua101_ctl_block_request(unsigned block, uint8_t out[UA101_CTL_READ_REQUEST_BYTES]);
 /* Returns 1 only for a well-formed message that asks for data and sets nothing. */
 int ua101_ctl_is_request_only(const uint8_t *msg, size_t len);
 /* Returns 1 only for exactly the one request above, byte for byte. The helper passes on nothing
@@ -71,6 +78,9 @@ typedef struct {
 } ua101_ctl_view;
 
 ua101_ctl_kind ua101_ctl_classify(const uint8_t *msg, size_t len, ua101_ctl_view *view);
+/* Returns 1 and sets *block when a classified message is a whole 256-byte block from
+   02 <block> 00 00, block 0 to 0x0F. */
+int ua101_ctl_block_reply(const ua101_ctl_view *view, unsigned *block);
 
 typedef struct {
     uint8_t on;   /* raw bit: which value means on isn't known yet */

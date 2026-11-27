@@ -122,7 +122,7 @@ Confirmed:
 
 ## Not safe to try
 
-Messages nothing shows to be safe: requests at `02 xx 00 00` (`xx` not 0) and `01 00 00 00`; sets at `00 00 00 01`, `00 01 00 00`, and the one-message patch bay presets at `00 00 00 08`.
+Messages nothing shows to be safe: requests at `02 xx 00 00` (`xx` not 0; `ua101settings --all-blocks` asks for `02 01` to `02 0F` as a developer's test, not yet run on a UA-101) and `01 00 00 00`; sets at `00 00 00 01`, `00 01 00 00`, and the one-message patch bay presets at `00 00 00 08`.
 
 ## Examples
 

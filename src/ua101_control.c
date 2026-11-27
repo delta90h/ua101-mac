@@ -20,16 +20,36 @@ uint8_t ua101_ctl_checksum(const uint8_t *bytes, size_t count)
     return (uint8_t)((0u - sum) & 0x7F);
 }
 
-void ua101_ctl_read_request(uint8_t out[UA101_CTL_READ_REQUEST_BYTES])
+int ua101_ctl_block_request(unsigned block, uint8_t out[UA101_CTL_READ_REQUEST_BYTES])
 {
-    /* Address 02 00 00 00, size 00 00 02 00, which is 256 in 7-bit bytes. */
-    static const uint8_t k_body[8] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00};
+    /* Address 02 <block> 00 00, size 00 00 02 00, which is 256 in 7-bit bytes. */
+    uint8_t body[8] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00};
 
+    if (block >= UA101_CTL_BLOCKS)
+        return 0;
+    body[1] = (uint8_t)block;
     memcpy(out, k_header, sizeof(k_header));
     out[5] = CMD_REQUEST;
-    memcpy(out + HEADER_BYTES, k_body, sizeof(k_body));
-    out[14] = ua101_ctl_checksum(k_body, sizeof(k_body));
+    memcpy(out + HEADER_BYTES, body, sizeof(body));
+    out[14] = ua101_ctl_checksum(body, sizeof(body));
     out[15] = 0xF7;
+    return 1;
+}
+
+void ua101_ctl_read_request(uint8_t out[UA101_CTL_READ_REQUEST_BYTES])
+{
+    (void)ua101_ctl_block_request(0, out);
+}
+
+int ua101_ctl_block_reply(const ua101_ctl_view *view, unsigned *block)
+{
+    const uint8_t *a = view->address;
+
+    if (view->command != CMD_SET || a[0] != 0x02 || a[1] >= UA101_CTL_BLOCKS || a[2] != 0 ||
+        a[3] != 0 || view->data_len != UA101_CTL_BLOCK_BYTES)
+        return 0;
+    *block = a[1];
+    return 1;
 }
 
 int ua101_ctl_is_request_only(const uint8_t *msg, size_t len)

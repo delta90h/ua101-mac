@@ -382,10 +382,54 @@ static void test_reassembly(void)
     }
 }
 
+/* The developer's read-only look at the other blocks (ua101settings --all-blocks). */
+static void test_block_requests(void)
+{
+    const uint8_t memory1[UA101_CTL_READ_REQUEST_BYTES] = {0xF0, 0x41, 0x10, 0x00, 0x69, 0x11,
+                                                           0x02, 0x03, 0x00, 0x00, 0x00, 0x00,
+                                                           0x02, 0x00, 0x79, 0xF7};
+    uint8_t msg[UA101_CTL_READ_REQUEST_BYTES], zero[UA101_CTL_READ_REQUEST_BYTES];
+    uint8_t reply[UA101_CTL_BLOCK_MESSAGE_BYTES];
+    ua101_ctl_view view;
+    unsigned b, block = 99;
+
+    ua101_ctl_read_request(zero);
+    EXPECT(ua101_ctl_block_request(0, msg) && memcmp(msg, zero, sizeof(msg)) == 0);
+    EXPECT(ua101_ctl_block_request(3, msg) && memcmp(msg, memory1, sizeof(msg)) == 0);
+    for (b = 0; b < UA101_CTL_BLOCKS; b++) {
+        EXPECT(ua101_ctl_block_request(b, msg));
+        EXPECT(ua101_ctl_is_request_only(msg, sizeof(msg)));
+        EXPECT(msg[5] == 0x11 && msg[6] == 0x02 && msg[7] == b);
+        /* The helper still passes on block 0 only. */
+        EXPECT(ua101_ctl_is_read_request(msg, sizeof(msg)) == (b == 0));
+    }
+    memset(msg, 0xAA, sizeof(msg));
+    EXPECT(!ua101_ctl_block_request(UA101_CTL_BLOCKS, msg));
+    EXPECT(!ua101_ctl_block_request(0x7F, msg));
+    EXPECT(msg[0] == 0xAA && msg[15] == 0xAA);
+
+    /* A reply from 02 05 00 00 is block 5; the settings block is still classified as before. */
+    memcpy(reply, (const uint8_t[]){0xF0, 0x41, 0x10, 0x00, 0x69, 0x12, 0x02, 0x05, 0x00, 0x00}, 10);
+    memset(reply + 10, 0, UA101_CTL_BLOCK_BYTES);
+    reply[sizeof(reply) - 2] = ua101_ctl_checksum(reply + 6, 4 + UA101_CTL_BLOCK_BYTES);
+    reply[sizeof(reply) - 1] = 0xF7;
+    EXPECT(ua101_ctl_classify(reply, sizeof(reply), &view) == UA101_CTL_OTHER);
+    EXPECT(ua101_ctl_block_reply(&view, &block) && block == 5);
+    reply[7] = 0x00;
+    reply[sizeof(reply) - 2] = ua101_ctl_checksum(reply + 6, 4 + UA101_CTL_BLOCK_BYTES);
+    EXPECT(ua101_ctl_classify(reply, sizeof(reply), &view) == UA101_CTL_SETTINGS);
+    EXPECT(ua101_ctl_block_reply(&view, &block) && block == 0);
+    reply[7] = 0x10;
+    reply[sizeof(reply) - 2] = ua101_ctl_checksum(reply + 6, 4 + UA101_CTL_BLOCK_BYTES);
+    EXPECT(ua101_ctl_classify(reply, sizeof(reply), &view) == UA101_CTL_OTHER);
+    EXPECT(!ua101_ctl_block_reply(&view, &block));
+}
+
 int main(void)
 {
     test_checksum();
     test_read_request();
+    test_block_requests();
     test_request_guard();
     test_settings_parse();
     test_values();
