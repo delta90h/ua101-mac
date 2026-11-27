@@ -17,7 +17,7 @@ enum ChannelNames {
     /// A line under the group's title.
     static let groupNote = ["what you hear", "into the monitor mix", "from the computer"]
     /// The name on top of each section of the mixer, in its middle (the user's words, 2026-11-27).
-    static let sectionTitle = ["MONITOR OUT", "Input Monitor", "Output Monitor"]
+    static let sectionTitle = ["MONITOR OUT", "INPUT MONITOR", "OUTPUT MONITOR"]
 
     /// The short label on a strip.
     static let short: [[String]] = [
